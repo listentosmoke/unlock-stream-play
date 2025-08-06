@@ -6,117 +6,112 @@
 
 @layer base {
   :root {
-    /* Light theme (fallback) */
-    --background: 240 10% 8%;
-    --foreground: 0 0% 95%;
-
-    --card: 240 10% 10%;
-    --card-foreground: 0 0% 95%;
-
-    --popover: 240 10% 10%;
-    --popover-foreground: 0 0% 95%;
-
-    /* Orange primary theme */
-    --primary: 25 95% 53%;           /* Vibrant orange */
-    --primary-foreground: 0 0% 0%;
+    /* Light theme colors (fallback - we mainly use dark) */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    
+    /* Orange theme for light mode */
+    --primary: 25 95% 53%;
+    --primary-foreground: 0 0% 100%;
     --primary-glow: 25 95% 65%;
-
-    --secondary: 240 10% 15%;
-    --secondary-foreground: 0 0% 85%;
-
-    --muted: 240 10% 12%;
-    --muted-foreground: 240 5% 65%;
-
-    --accent: 35 90% 55%;            /* Golden orange accent */
-    --accent-foreground: 0 0% 0%;
-
-    --success: 150 60% 50%;          /* Points green */
-    --success-foreground: 0 0% 0%;
-
-    --warning: 25 95% 53%;           /* Orange warning */
-    --warning-foreground: 0 0% 0%;
-
+    
+    --secondary: 240 6% 90%;
+    --secondary-foreground: 240 10% 10%;
+    
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    
+    --accent: 35 90% 55%;
+    --accent-foreground: 0 0% 100%;
+    
+    --success: 150 60% 50%;
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 25 95% 53%;
+    --warning-foreground: 0 0% 100%;
+    
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 240 10% 18%;
-    --input: 240 10% 15%;
+    
+    --border: 240 6% 90%;
+    --input: 240 6% 96%;
     --ring: 25 95% 53%;
-
-    /* Video platform specific - Dark theme */
-    --video-bg: 0 0% 3%;
+    
+    --radius: 0.75rem;
+    
+    /* Video platform specific */
+    --video-bg: 0 0% 5%;
     --video-overlay: 0 0% 0% / 0.7;
     --premium-gradient: linear-gradient(135deg, hsl(25 95% 53%), hsl(35 90% 55%));
     --points-gradient: linear-gradient(135deg, hsl(150 60% 50%), hsl(120 70% 45%));
     --unlock-glow: 0 0 20px hsl(25 95% 53% / 0.5);
 
-    --radius: 0.75rem;
-
+    /* Sidebar colors */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
+    --sidebar-primary: 25 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-border: 240 6% 90%;
+    --sidebar-ring: 25 95% 53%;
   }
 
   .dark {
-    /* Dark streaming theme */
-    --background: 0 0% 3%;
-    --foreground: 0 0% 98%;
-
-    --card: 240 10% 8%;
-    --card-foreground: 0 0% 98%;
-
-    --popover: 240 10% 8%;
-    --popover-foreground: 0 0% 98%;
-
-    --primary: 280 100% 65%;
+    /* Dark theme with orange accents */
+    --background: 240 10% 4%;
+    --foreground: 0 0% 95%;
+    
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 95%;
+    
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 95%;
+    
+    /* Orange primary colors for dark mode */
+    --primary: 25 95% 53%;
     --primary-foreground: 0 0% 0%;
-    --primary-glow: 280 100% 75%;
-
+    --primary-glow: 25 95% 65%;
+    
     --secondary: 240 10% 12%;
-    --secondary-foreground: 0 0% 90%;
-
-    --muted: 240 10% 10%;
+    --secondary-foreground: 0 0% 85%;
+    
+    --muted: 240 10% 8%;
     --muted-foreground: 240 5% 65%;
-
-    --accent: 210 100% 55%;
+    
+    --accent: 35 90% 55%;
     --accent-foreground: 0 0% 0%;
-
-    --success: 150 60% 55%;
+    
+    --success: 150 60% 50%;
     --success-foreground: 0 0% 0%;
-
-    --warning: 40 90% 60%;
+    
+    --warning: 25 95% 53%;
     --warning-foreground: 0 0% 0%;
-
-    --destructive: 0 84% 65%;
-    --destructive-foreground: 0 0% 0%;
-
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
     --border: 240 10% 15%;
     --input: 240 10% 12%;
-    --ring: 280 100% 65%;
-
+    --ring: 25 95% 53%;
+    
+    /* Dark sidebar colors */
+    --sidebar-background: 240 10% 6%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 25 95% 53%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 240 10% 12%;
+    --sidebar-accent-foreground: 0 0% 85%;
+    --sidebar-border: 240 10% 15%;
+    --sidebar-ring: 25 95% 53%;
+    
     /* Enhanced dark video theme */
-    --video-bg: 0 0% 2%;
+    --video-bg: 240 10% 2%;
     --video-overlay: 0 0% 0% / 0.8;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
