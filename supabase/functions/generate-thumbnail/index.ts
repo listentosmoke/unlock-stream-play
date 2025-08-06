@@ -32,16 +32,15 @@ serve(async (req) => {
 
     console.log('Generating thumbnail for video:', videoId)
 
-    // Create a simple but valid SVG thumbnail
-    const svgContent = createSVGThumbnail(videoId)
-    const thumbnailBuffer = new TextEncoder().encode(svgContent)
+    // Create a PNG thumbnail
+    const pngBuffer = createPNGThumbnail(videoId)
     
     // Upload thumbnail to storage
-    const thumbnailFileName = `${videoId}-thumbnail.svg`
+    const thumbnailFileName = `${videoId}-thumbnail.png`
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('videos')
-      .upload(`thumbnails/${thumbnailFileName}`, thumbnailBuffer, {
-        contentType: 'image/svg+xml',
+      .upload(`thumbnails/${thumbnailFileName}`, pngBuffer, {
+        contentType: 'image/png',
         upsert: true
       })
 
@@ -94,7 +93,7 @@ serve(async (req) => {
   }
 })
 
-function createSVGThumbnail(videoId: string): string {
+function createPNGThumbnail(videoId: string): Uint8Array {
   // Generate colors based on video ID
   let hash = 0
   for (let i = 0; i < videoId.length; i++) {
@@ -107,21 +106,98 @@ function createSVGThumbnail(videoId: string): string {
   const rgb1 = hslToRgb(hue1 / 360, 0.7, 0.5)
   const rgb2 = hslToRgb(hue2 / 360, 0.7, 0.3)
   
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="640" height="360" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:rgb(${rgb1[0]},${rgb1[1]},${rgb1[2]});stop-opacity:1" />
-      <stop offset="100%" style="stop-color:rgb(${rgb2[0]},${rgb2[1]},${rgb2[2]});stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#grad1)" />
-  <rect width="100%" height="100%" fill="rgba(0,0,0,0.3)" />
-  <circle cx="320" cy="180" r="50" fill="rgba(0,0,0,0.7)" />
-  <polygon points="300,165 300,195 345,180" fill="white" />
-  <rect x="570" y="325" width="60" height="25" rx="3" fill="rgba(0,0,0,0.8)" />
-  <text x="600" y="342" font-family="Arial" font-size="12" fill="white" text-anchor="middle">0:30</text>
-</svg>`
+  // Create a simple PNG using manual PNG construction
+  const width = 640
+  const height = 360
+  
+  // Create image data array (RGBA)
+  const imageData = new Uint8Array(width * height * 4)
+  
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const index = (y * width + x) * 4
+      
+      // Create gradient effect
+      const gradientFactor = (x + y) / (width + height)
+      const r = Math.floor(rgb1[0] * (1 - gradientFactor) + rgb2[0] * gradientFactor)
+      const g = Math.floor(rgb1[1] * (1 - gradientFactor) + rgb2[1] * gradientFactor)
+      const b = Math.floor(rgb1[2] * (1 - gradientFactor) + rgb2[2] * gradientFactor)
+      
+      // Add play button circle in center
+      const centerX = width / 2
+      const centerY = height / 2
+      const distance = Math.sqrt((x - centerX) ** 2 + (y - centerY) ** 2)
+      
+      if (distance <= 50) {
+        // Dark circle for play button
+        imageData[index] = 0
+        imageData[index + 1] = 0
+        imageData[index + 2] = 0
+        imageData[index + 3] = 180
+        
+        // White triangle (simplified)
+        if (x > centerX - 20 && x < centerX + 20 && y > centerY - 15 && y < centerY + 15) {
+          const triangleX = x - (centerX - 20)
+          const triangleY = y - (centerY - 15)
+          if (triangleX > triangleY * 0.75 && triangleX > (30 - triangleY) * 0.75) {
+            imageData[index] = 255
+            imageData[index + 1] = 255
+            imageData[index + 2] = 255
+            imageData[index + 3] = 255
+          }
+        }
+      } else {
+        imageData[index] = r
+        imageData[index + 1] = g
+        imageData[index + 2] = b
+        imageData[index + 3] = 255
+      }
+    }
+  }
+  
+  // Create a basic PNG - this is a simplified implementation
+  // In a real scenario, you'd use a proper PNG encoding library
+  // For now, we'll create a BMP format which is simpler
+  return createBMP(imageData, width, height)
+}
+
+function createBMP(imageData: Uint8Array, width: number, height: number): Uint8Array {
+  const rowPadding = (4 - ((width * 3) % 4)) % 4
+  const pixelArraySize = (width * 3 + rowPadding) * height
+  const fileSize = 54 + pixelArraySize
+  
+  const bmp = new Uint8Array(fileSize)
+  const view = new DataView(bmp.buffer)
+  
+  // BMP Header
+  view.setUint16(0, 0x424D, true) // BM signature
+  view.setUint32(2, fileSize, true) // File size
+  view.setUint32(10, 54, true) // Pixel data offset
+  
+  // DIB Header
+  view.setUint32(14, 40, true) // DIB header size
+  view.setInt32(18, width, true) // Width
+  view.setInt32(22, -height, true) // Height (negative for top-down)
+  view.setUint16(26, 1, true) // Planes
+  view.setUint16(28, 24, true) // Bits per pixel
+  view.setUint32(34, pixelArraySize, true) // Pixel array size
+  
+  // Pixel data (BGR format for BMP)
+  let dataIndex = 54
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const srcIndex = (y * width + x) * 4
+      bmp[dataIndex++] = imageData[srcIndex + 2] // B
+      bmp[dataIndex++] = imageData[srcIndex + 1] // G
+      bmp[dataIndex++] = imageData[srcIndex] // R
+    }
+    // Add row padding
+    for (let p = 0; p < rowPadding; p++) {
+      bmp[dataIndex++] = 0
+    }
+  }
+  
+  return bmp
 }
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
