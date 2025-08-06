@@ -6,49 +6,49 @@
 
 @layer base {
   :root {
-    /* Base colors for light theme */
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    /* Light theme (fallback) */
+    --background: 240 10% 8%;
+    --foreground: 0 0% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card: 240 10% 10%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover: 240 10% 10%;
+    --popover-foreground: 0 0% 95%;
 
-    /* Premium streaming theme */
-    --primary: 280 100% 60%;        /* Electric purple */
-    --primary-foreground: 0 0% 100%;
-    --primary-glow: 280 100% 70%;
+    /* Orange primary theme */
+    --primary: 25 95% 53%;           /* Vibrant orange */
+    --primary-foreground: 0 0% 0%;
+    --primary-glow: 25 95% 65%;
 
-    --secondary: 240 10% 95%;
-    --secondary-foreground: 240 10% 10%;
+    --secondary: 240 10% 15%;
+    --secondary-foreground: 0 0% 85%;
 
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
+    --muted: 240 10% 12%;
+    --muted-foreground: 240 5% 65%;
 
-    --accent: 210 100% 50%;          /* Electric blue */
-    --accent-foreground: 0 0% 100%;
+    --accent: 35 90% 55%;            /* Golden orange accent */
+    --accent-foreground: 0 0% 0%;
 
     --success: 150 60% 50%;          /* Points green */
-    --success-foreground: 0 0% 100%;
+    --success-foreground: 0 0% 0%;
 
-    --warning: 40 90% 55%;           /* Gold for premium */
-    --warning-foreground: 0 0% 100%;
+    --warning: 25 95% 53%;           /* Orange warning */
+    --warning-foreground: 0 0% 0%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 6% 90%;
-    --input: 240 6% 96%;
-    --ring: 280 100% 60%;
+    --border: 240 10% 18%;
+    --input: 240 10% 15%;
+    --ring: 25 95% 53%;
 
-    /* Video platform specific */
-    --video-bg: 0 0% 5%;
-    --video-overlay: 0 0% 0% / 0.6;
-    --premium-gradient: linear-gradient(135deg, hsl(280 100% 60%), hsl(210 100% 50%));
+    /* Video platform specific - Dark theme */
+    --video-bg: 0 0% 3%;
+    --video-overlay: 0 0% 0% / 0.7;
+    --premium-gradient: linear-gradient(135deg, hsl(25 95% 53%), hsl(35 90% 55%));
     --points-gradient: linear-gradient(135deg, hsl(150 60% 50%), hsl(120 70% 45%));
-    --unlock-glow: 0 0 20px hsl(280 100% 60% / 0.5);
+    --unlock-glow: 0 0 20px hsl(25 95% 53% / 0.5);
 
     --radius: 0.75rem;
 
