@@ -69,7 +69,7 @@ export function GiftCardModeration() {
           .insert({
             user_id: giftCard.submitted_by,
             amount: giftCard.points_value,
-            type: 'gift_card',
+            type: 'gift_card' as any,
             description: `Gift card redeemed: ${GIFT_CARD_TYPE_LABELS[giftCard.gift_card_type as keyof typeof GIFT_CARD_TYPE_LABELS]} (${giftCard.code.substring(0, 4)}...)`
           });
 

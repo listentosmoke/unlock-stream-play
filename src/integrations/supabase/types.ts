@@ -231,7 +231,7 @@ export type Database = {
         | "steam"
         | "visa"
         | "paypal"
-      transaction_type: "purchase" | "reward" | "unlock"
+      transaction_type: "purchase" | "reward" | "unlock" | "gift_card"
       user_role: "user" | "admin" | "moderator"
       video_status: "pending" | "approved" | "rejected"
     }
@@ -369,7 +369,7 @@ export const Constants = {
         "visa",
         "paypal",
       ],
-      transaction_type: ["purchase", "reward", "unlock"],
+      transaction_type: ["purchase", "reward", "unlock", "gift_card"],
       user_role: ["user", "admin", "moderator"],
       video_status: ["pending", "approved", "rejected"],
     },
