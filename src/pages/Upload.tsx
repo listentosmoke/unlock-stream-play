@@ -80,7 +80,7 @@ export default function Upload() {
         .getPublicUrl(fileName);
 
       // Insert video record
-      const { error } = await supabase
+      const { data: insertData, error } = await supabase
         .from('videos')
         .insert({
           uploader_id: user.id,
@@ -90,9 +90,27 @@ export default function Upload() {
           unlock_cost: 10,
           reward_points: 5,
           status: 'pending'
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Generate thumbnail in background
+      if (insertData?.id) {
+        try {
+          await supabase.functions.invoke('generate-thumbnail', {
+            body: {
+              videoId: insertData.id,
+              videoUrl: publicUrl
+            }
+          });
+          console.log('Thumbnail generation started for video:', insertData.id);
+        } catch (thumbnailError) {
+          console.error('Error starting thumbnail generation:', thumbnailError);
+          // Don't fail the upload if thumbnail generation fails
+        }
+      }
 
       toast({
         title: "Success!",
