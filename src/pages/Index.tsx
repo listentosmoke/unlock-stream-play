@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth/AuthContext';
 import { Header } from '@/components/layout/Header';
 import { VideoCard } from '@/components/video/VideoCard';
-import { VideoPlayer } from '@/components/video/VideoPlayer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,7 +13,6 @@ const Index = () => {
   const [videos, setVideos] = useState<any[]>([]);
   const [userUnlocks, setUserUnlocks] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedVideo, setSelectedVideo] = useState<any>(null);
 
   useEffect(() => {
     fetchVideos();
@@ -77,25 +75,6 @@ const Index = () => {
       <Header />
       
       <main className="container mx-auto px-4 py-8">
-        {selectedVideo ? (
-          <div className="max-w-4xl mx-auto">
-            <button 
-              onClick={() => setSelectedVideo(null)}
-              className="mb-4 text-primary hover:underline"
-            >
-              ← Back to videos
-            </button>
-            <VideoPlayer 
-              video={selectedVideo} 
-              onUnlock={() => {
-                // Refresh user profile to update points
-                if (refreshProfile) refreshProfile();
-                fetchUserUnlocks();
-              }} 
-            />
-          </div>
-        ) : (
-          <>
             {/* Hero Section */}
             <div className="text-center mb-12">
               <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
@@ -184,7 +163,6 @@ const Index = () => {
                       key={video.id} 
                       video={video}
                       isUnlocked={userUnlocks.includes(video.id)}
-                      onClick={() => setSelectedVideo(video)}
                       onUnlock={() => {
                         setUserUnlocks(prev => [...prev, video.id]);
                         fetchUserUnlocks();
@@ -194,8 +172,6 @@ const Index = () => {
                 </div>
               )}
             </div>
-          </>
-        )}
       </main>
     </div>
   );

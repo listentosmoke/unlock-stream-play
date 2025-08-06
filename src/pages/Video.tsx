@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthContext';
 import { Header } from '@/components/layout/Header';
-import { VideoCard } from '@/components/video/VideoCard';
+import { VideoThumbnail } from '@/components/video/VideoThumbnail';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -11,6 +11,7 @@ import { ArrowLeft, Play, Lock, Coins, Eye, Users } from 'lucide-react';
 
 const Video = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user, userProfile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const [video, setVideo] = useState<any>(null);
@@ -223,6 +224,12 @@ const Video = () => {
                       alt={video.title}
                       className="w-full h-full object-cover"
                     />
+                  ) : video.full_video_url ? (
+                    <VideoThumbnail 
+                      videoUrl={video.full_video_url}
+                      alt={video.title}
+                      className="w-full h-full object-cover"
+                    />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
                       <Play className="h-16 w-16 text-primary/50" />
@@ -283,21 +290,27 @@ const Video = () => {
             <div className="space-y-4">
               {recommendedVideos.map((recommendedVideo) => (
                 <div key={recommendedVideo.id} className="flex gap-3">
-                  <div 
-                    className="relative w-40 aspect-video bg-video-bg rounded overflow-hidden cursor-pointer"
-                    onClick={() => window.location.href = `/video/${recommendedVideo.id}`}
-                  >
-                    {recommendedVideo.thumbnail_url ? (
-                      <img 
-                        src={recommendedVideo.thumbnail_url} 
-                        alt={recommendedVideo.title}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                        <Play className="h-6 w-6 text-primary/50" />
-                      </div>
-                    )}
+                <div 
+                  className="relative w-40 aspect-video bg-video-bg rounded overflow-hidden cursor-pointer"
+                  onClick={() => navigate(`/video/${recommendedVideo.id}`)}
+                >
+                  {recommendedVideo.thumbnail_url ? (
+                    <img 
+                      src={recommendedVideo.thumbnail_url} 
+                      alt={recommendedVideo.title}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform"
+                    />
+                  ) : recommendedVideo.full_video_url ? (
+                    <VideoThumbnail 
+                      videoUrl={recommendedVideo.full_video_url}
+                      alt={recommendedVideo.title}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                      <Play className="h-6 w-6 text-primary/50" />
+                    </div>
+                  )}
                     
                     {!userUnlocks.includes(recommendedVideo.id) && (
                       <div className="absolute inset-0 bg-video-overlay/50 flex items-center justify-center">
@@ -309,7 +322,7 @@ const Video = () => {
                   <div className="flex-1 min-w-0">
                     <h3 
                       className="font-medium text-sm line-clamp-2 cursor-pointer hover:text-primary"
-                      onClick={() => window.location.href = `/video/${recommendedVideo.id}`}
+                      onClick={() => navigate(`/video/${recommendedVideo.id}`)}
                     >
                       {recommendedVideo.title}
                     </h3>
