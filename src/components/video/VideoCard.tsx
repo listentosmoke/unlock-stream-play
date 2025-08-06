@@ -132,6 +132,10 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
             src={video.thumbnail_url} 
             alt={video.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={(e) => {
+              console.log('Thumbnail image failed to load:', video.thumbnail_url);
+              e.currentTarget.style.display = 'none';
+            }}
           />
         ) : video.full_video_url ? (
           <VideoThumbnail 

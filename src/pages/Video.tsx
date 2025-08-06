@@ -223,6 +223,10 @@ const Video = () => {
                       src={video.thumbnail_url} 
                       alt={video.title}
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        console.log('Main video thumbnail failed to load:', video.thumbnail_url);
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   ) : video.full_video_url ? (
                     <VideoThumbnail 
@@ -299,6 +303,10 @@ const Video = () => {
                       src={recommendedVideo.thumbnail_url} 
                       alt={recommendedVideo.title}
                       className="w-full h-full object-cover hover:scale-105 transition-transform"
+                      onError={(e) => {
+                        console.log('Recommended video thumbnail failed to load:', recommendedVideo.thumbnail_url);
+                        e.currentTarget.style.display = 'none';
+                      }}
                     />
                   ) : recommendedVideo.full_video_url ? (
                     <VideoThumbnail 
