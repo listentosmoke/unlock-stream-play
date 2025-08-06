@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthContext';
 import { Header } from '@/components/layout/Header';
 import { VideoThumbnail } from '@/components/video/VideoThumbnail';
+import { VideoPlaceholder } from '@/components/video/VideoPlaceholder';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -235,9 +236,10 @@ const Video = () => {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <Play className="h-16 w-16 text-primary/50" />
-                    </div>
+                    <VideoPlaceholder 
+                      title={video.title}
+                      className="w-full h-full"
+                    />
                   )}
                   
                   <div className="absolute inset-0 bg-video-overlay backdrop-blur-sm flex items-center justify-center">
@@ -315,9 +317,10 @@ const Video = () => {
                       className="w-full h-full object-cover hover:scale-105 transition-transform"
                     />
                   ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <Play className="h-6 w-6 text-primary/50" />
-                    </div>
+                    <VideoPlaceholder 
+                      title={recommendedVideo.title}
+                      className="w-full h-full"
+                    />
                   )}
                     
                     {!userUnlocks.includes(recommendedVideo.id) && (

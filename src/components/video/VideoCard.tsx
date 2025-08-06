@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Play, Lock, Star, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { VideoThumbnail } from './VideoThumbnail';
+import { VideoPlaceholder } from './VideoPlaceholder';
 
 interface VideoCardProps {
   video: {
@@ -144,9 +145,10 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-            <Play className="h-16 w-16 text-primary/50" />
-          </div>
+          <VideoPlaceholder 
+            title={video.title}
+            className="w-full h-full"
+          />
         )}
         
         {/* Duration badge */}

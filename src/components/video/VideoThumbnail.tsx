@@ -122,10 +122,27 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
     }
   };
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (thumbnailUrl) {
+        URL.revokeObjectURL(thumbnailUrl);
+      }
+    };
+  }, [thumbnailUrl]);
+
   if (loading) {
     return (
       <div className={`bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center ${className}`}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (error || !videoUrl) {
+    return (
+      <div className={`bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center ${className}`}>
+        <Play className="h-16 w-16 text-primary/50" />
       </div>
     );
   }
@@ -137,6 +154,7 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
         style={{ display: 'none' }}
         muted
         playsInline
+        preload="metadata"
       />
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       
@@ -145,6 +163,11 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
           src={thumbnailUrl} 
           alt={alt}
           className={className}
+          onLoad={() => console.log('Thumbnail loaded successfully')}
+          onError={() => {
+            console.error('Thumbnail image failed to render');
+            setError(true);
+          }}
         />
       ) : (
         <div className={`bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center ${className}`}>
