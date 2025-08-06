@@ -124,7 +124,7 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
 
   return (
     <Card 
-      className="group overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 cursor-pointer" 
+      className="group overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 cursor-pointer animate-fade-in" 
       onClick={handleCardClick}
     >
       <div className="relative aspect-video bg-video-bg overflow-hidden">
@@ -144,7 +144,7 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
           </div>
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-            <Play className="h-16 w-16 text-primary/50" />
+            <Play className="h-12 w-12 sm:h-16 sm:w-16 text-primary/50" />
           </div>
         )}
         
@@ -152,7 +152,7 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
         {video.duration && (
           <Badge 
             variant="secondary" 
-            className="absolute bottom-2 right-2 bg-video-bg/80 text-white border-0"
+            className="absolute bottom-2 right-2 bg-video-bg/80 text-white border-0 text-xs"
           >
             {formatDuration(video.duration)}
           </Badge>
@@ -162,8 +162,8 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
         {!isUnlocked && (
           <div className="absolute inset-0 bg-video-overlay backdrop-blur-sm flex items-center justify-center">
             <div className="text-center text-white">
-              <Lock className="h-12 w-12 mx-auto mb-2 text-primary" />
-              <p className="text-sm font-medium">Preview Only</p>
+              <Lock className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 text-primary" />
+              <p className="text-xs sm:text-sm font-medium">Preview Only</p>
               <p className="text-xs text-white/80">{video.unlock_cost} points to unlock</p>
             </div>
           </div>
@@ -173,35 +173,37 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           <Button 
             size="lg" 
-            className="rounded-full h-16 w-16 p-0 bg-primary/90 hover:bg-primary"
+            className="rounded-full h-12 w-12 sm:h-16 sm:w-16 p-0 bg-primary/90 hover:bg-primary"
           >
-            <Play className="h-6 w-6 ml-1" fill="currentColor" />
+            <Play className="h-4 w-4 sm:h-6 sm:w-6 ml-1" fill="currentColor" />
           </Button>
         </div>
       </div>
 
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4">
         <div className="space-y-3">
           <div>
-            <h3 className="font-semibold text-lg line-clamp-2 group-hover:text-primary transition-colors">
+            <h3 className="font-semibold text-sm sm:text-lg line-clamp-2 group-hover:text-primary transition-colors leading-tight">
               {video.title}
             </h3>
             {video.description && (
-              <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
+              <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 mt-1">
                 {video.description}
               </p>
             )}
           </div>
 
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <span className="flex items-center gap-1">
                 <Eye className="h-3 w-3" />
-                {video.view_count}
+                <span className="hidden xs:inline">{video.view_count}</span>
+                <span className="xs:hidden">{video.view_count > 999 ? `${Math.floor(video.view_count/1000)}k` : video.view_count}</span>
               </span>
               <span className="flex items-center gap-1">
                 <Star className="h-3 w-3" />
-                {video.unlock_count}
+                <span className="hidden xs:inline">{video.unlock_count}</span>
+                <span className="xs:hidden">{video.unlock_count > 999 ? `${Math.floor(video.unlock_count/1000)}k` : video.unlock_count}</span>
               </span>
             </div>
           </div>
@@ -213,8 +215,9 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
                 handleUnlock();
               }}
               disabled={loading || !userProfile || userProfile.points < video.unlock_cost}
-              className="w-full"
+              className="w-full text-xs sm:text-sm"
               variant="outline"
+              size="sm"
             >
               {loading ? 'Unlocking...' : `Unlock for ${video.unlock_cost} points`}
             </Button>

@@ -188,20 +188,21 @@ const Video = () => {
     <div className="min-h-screen bg-background">
       <Header />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-3 sm:px-4 py-6 sm:py-8">
         <div className="mb-4">
-          <Button variant="ghost" asChild>
+          <Button variant="ghost" size="sm" asChild>
             <Link to="/">
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to videos
+              <span className="hidden sm:inline">Back to videos</span>
+              <span className="sm:hidden">Back</span>
             </Link>
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           {/* Main video player */}
           <div className="lg:col-span-2">
-            <div className="aspect-video bg-video-bg rounded-lg overflow-hidden mb-4">
+            <div className="aspect-video bg-video-bg rounded-lg overflow-hidden mb-4 relative">
               {isUnlocked ? (
                 video.full_video_url ? (
                   <video 
@@ -214,7 +215,7 @@ const Video = () => {
                   </video>
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                    <p>Video file not available</p>
+                    <p className="text-sm sm:text-base">Video file not available</p>
                   </div>
                 )
               ) : (
@@ -232,25 +233,26 @@ const Video = () => {
                     />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <Play className="h-16 w-16 text-primary/50" />
+                      <Play className="h-12 w-12 sm:h-16 sm:w-16 text-primary/50" />
                     </div>
                   )}
                   
-                  <div className="absolute inset-0 bg-video-overlay backdrop-blur-sm flex items-center justify-center">
-                    <div className="text-center text-white">
-                      <Lock className="h-16 w-16 mx-auto mb-4 text-primary" />
-                      <p className="text-lg font-medium mb-2">Preview Only</p>
-                      <p className="text-white/80 mb-4">{video.unlock_cost} points to unlock</p>
+                  <div className="absolute inset-0 bg-video-overlay backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="text-center text-white max-w-sm">
+                      <Lock className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-3 sm:mb-4 text-primary" />
+                      <p className="text-base sm:text-lg font-medium mb-2">Preview Only</p>
+                      <p className="text-white/80 mb-4 text-sm sm:text-base">{video.unlock_cost} points to unlock</p>
                       {user ? (
                         <Button 
                           onClick={handleUnlock}
                           disabled={isUnlocking || !userProfile || userProfile.points < video.unlock_cost}
                           size="lg"
+                          className="w-full sm:w-auto"
                         >
                           {isUnlocking ? 'Unlocking...' : `Unlock for ${video.unlock_cost} points`}
                         </Button>
                       ) : (
-                        <Button asChild size="lg">
+                        <Button asChild size="lg" className="w-full sm:w-auto">
                           <Link to="/auth">Sign in to unlock</Link>
                         </Button>
                       )}
@@ -262,9 +264,9 @@ const Video = () => {
 
             {/* Video details */}
             <div className="space-y-4">
-              <h1 className="text-2xl font-bold">{video.title}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold leading-tight">{video.title}</h1>
               
-              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Eye className="h-4 w-4" />
                   {video.view_count} views
@@ -273,12 +275,12 @@ const Video = () => {
                   <Users className="h-4 w-4" />
                   {video.unlock_count} unlocks
                 </span>
-                <Badge variant="secondary">{video.unlock_cost} points</Badge>
+                <Badge variant="secondary" className="text-xs">{video.unlock_cost} points</Badge>
               </div>
 
               {video.description && (
-                <div className="bg-card p-4 rounded-lg">
-                  <p className="whitespace-pre-wrap">{video.description}</p>
+                <div className="bg-card p-3 sm:p-4 rounded-lg">
+                  <p className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">{video.description}</p>
                 </div>
               )}
             </div>
@@ -287,40 +289,40 @@ const Video = () => {
           {/* Recommended videos sidebar */}
           <div className="lg:col-span-1">
             <h2 className="text-lg font-semibold mb-4">Recommended Videos</h2>
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {recommendedVideos.map((recommendedVideo) => (
                 <div key={recommendedVideo.id} className="flex gap-3">
-                <div 
-                  className="relative w-40 aspect-video bg-video-bg rounded overflow-hidden cursor-pointer"
-                  onClick={() => navigate(`/video/${recommendedVideo.id}`)}
-                >
-                  {recommendedVideo.thumbnail_url ? (
-                    <img 
-                      src={recommendedVideo.thumbnail_url} 
-                      alt={recommendedVideo.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform"
-                      onLoad={() => console.log('Recommended thumbnail loaded:', recommendedVideo.thumbnail_url)}
-                      onError={(e) => {
-                        console.log('Recommended thumbnail failed to load:', recommendedVideo.thumbnail_url);
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
-                      <Play className="h-6 w-6 text-primary/50" />
-                    </div>
-                  )}
-                    
+                  <div 
+                    className="relative w-28 sm:w-32 lg:w-40 aspect-video bg-video-bg rounded overflow-hidden cursor-pointer flex-shrink-0"
+                    onClick={() => navigate(`/video/${recommendedVideo.id}`)}
+                  >
+                    {recommendedVideo.thumbnail_url ? (
+                      <img 
+                        src={recommendedVideo.thumbnail_url} 
+                        alt={recommendedVideo.title}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform"
+                        onLoad={() => console.log('Recommended thumbnail loaded:', recommendedVideo.thumbnail_url)}
+                        onError={(e) => {
+                          console.log('Recommended thumbnail failed to load:', recommendedVideo.thumbnail_url);
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                        <Play className="h-4 w-4 sm:h-6 sm:w-6 text-primary/50" />
+                      </div>
+                    )}
+                      
                     {!userUnlocks.includes(recommendedVideo.id) && (
                       <div className="absolute inset-0 bg-video-overlay/50 flex items-center justify-center">
-                        <Lock className="h-4 w-4 text-white" />
+                        <Lock className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
                       </div>
                     )}
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <h3 
-                      className="font-medium text-sm line-clamp-2 cursor-pointer hover:text-primary"
+                      className="font-medium text-xs sm:text-sm line-clamp-2 cursor-pointer hover:text-primary leading-tight"
                       onClick={() => navigate(`/video/${recommendedVideo.id}`)}
                     >
                       {recommendedVideo.title}
