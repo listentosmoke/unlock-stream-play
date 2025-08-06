@@ -41,17 +41,38 @@ export default function Admin() {
 
   const fetchPendingVideos = async () => {
     try {
-      const { data, error } = await supabase
+      // First get videos
+      const { data: videos, error: videosError } = await supabase
         .from('videos')
-        .select(`
-          *,
-          profiles!inner(username, display_name)
-        `)
+        .select('*')
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setPendingVideos(data || []);
+      if (videosError) throw videosError;
+
+      // Then get profiles for uploaders
+      if (videos && videos.length > 0) {
+        const userIds = videos.map(v => v.uploader_id);
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name')
+          .in('user_id', userIds);
+
+        if (profilesError) throw profilesError;
+
+        // Combine data
+        const combinedData = videos.map(v => {
+          const profile = profiles?.find(p => p.user_id === v.uploader_id);
+          return {
+            ...v,
+            profiles: profile || { username: 'Unknown', display_name: 'Unknown User' }
+          };
+        });
+
+        setPendingVideos(combinedData);
+      } else {
+        setPendingVideos([]);
+      }
     } catch (error) {
       console.error('Error fetching pending videos:', error);
     } finally {

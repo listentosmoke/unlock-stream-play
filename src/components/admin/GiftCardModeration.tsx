@@ -36,18 +36,39 @@ export function GiftCardModeration() {
   const fetchPendingGiftCards = async () => {
     console.log('Fetching pending gift cards...');
     try {
-      const { data, error } = await supabase
+      // First get gift cards
+      const { data: giftCards, error: giftCardsError } = await supabase
         .from('gift_cards')
-        .select(`
-          *,
-          profiles!inner(username, display_name)
-        `)
+        .select('*')
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      console.log('Gift cards query result:', { data, error });
-      if (error) throw error;
-      setPendingGiftCards(data || []);
+      if (giftCardsError) throw giftCardsError;
+
+      // Then get profiles for submitters
+      if (giftCards && giftCards.length > 0) {
+        const userIds = giftCards.map(gc => gc.submitted_by);
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name')
+          .in('user_id', userIds);
+
+        if (profilesError) throw profilesError;
+
+        // Combine data
+        const combinedData = giftCards.map(gc => {
+          const profile = profiles?.find(p => p.user_id === gc.submitted_by);
+          return {
+            ...gc,
+            profiles: profile || { username: 'Unknown', display_name: 'Unknown User' }
+          };
+        });
+
+        console.log('Gift cards with profiles:', combinedData);
+        setPendingGiftCards(combinedData);
+      } else {
+        setPendingGiftCards([]);
+      }
     } catch (error) {
       console.error('Error fetching pending gift cards:', error);
     } finally {
