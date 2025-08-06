@@ -56,12 +56,17 @@ export function GiftCardModeration() {
       let pointsToAward = 0;
       
       if (action === 'approved') {
-        // Use admin override or calculate from dollar value (10 points = $1)
+        // Admin must specify points to award
         const override = pointsOverride[giftCardId];
         if (override && !isNaN(parseInt(override))) {
           pointsToAward = parseInt(override);
         } else {
-          pointsToAward = Math.round(giftCard.dollar_value * 10);
+          toast({
+            title: "Error",
+            description: "Please specify the points to award for this gift card",
+            variant: "destructive",
+          });
+          return;
         }
       }
 
@@ -89,7 +94,7 @@ export function GiftCardModeration() {
             user_id: giftCard.submitted_by,
             amount: pointsToAward,
             type: 'gift_card' as any,
-            description: `Gift card redeemed: ${GIFT_CARD_TYPE_LABELS[giftCard.gift_card_type as keyof typeof GIFT_CARD_TYPE_LABELS]} ($${giftCard.dollar_value})`
+            description: `Gift card redeemed: ${GIFT_CARD_TYPE_LABELS[giftCard.gift_card_type as keyof typeof GIFT_CARD_TYPE_LABELS]}`
           });
 
         if (transactionError) throw transactionError;
@@ -167,7 +172,7 @@ export function GiftCardModeration() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-muted-foreground">Gift Card Code</label>
                     <div className="font-mono bg-muted p-3 rounded border text-sm">
@@ -175,24 +180,19 @@ export function GiftCardModeration() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Dollar Value</label>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-lg">${giftCard.dollar_value}</span>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
                     <label className="text-sm font-medium text-muted-foreground">Points to Award</label>
                     <div className="flex items-center gap-2">
                       <Input
                         type="number"
-                        placeholder={`${Math.round(giftCard.dollar_value * 10)}`}
+                        placeholder="Enter points to award"
                         value={pointsOverride[giftCard.id] || ''}
                         onChange={(e) => setPointsOverride(prev => ({ ...prev, [giftCard.id]: e.target.value }))}
-                        className="w-24"
+                        className="w-32"
+                        required
                       />
                       <Coins className="h-4 w-4 text-warning" />
                       <span className="text-sm text-muted-foreground">
-                        (Default: {Math.round(giftCard.dollar_value * 10)})
+                        Points
                       </span>
                     </div>
                   </div>

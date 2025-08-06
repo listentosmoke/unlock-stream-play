@@ -20,7 +20,6 @@ export type Database = {
           approved_by: string | null
           code: string
           created_at: string
-          dollar_value: number | null
           gift_card_type: Database["public"]["Enums"]["gift_card_type"]
           id: string
           points_awarded: number | null
@@ -36,7 +35,6 @@ export type Database = {
           approved_by?: string | null
           code: string
           created_at?: string
-          dollar_value?: number | null
           gift_card_type: Database["public"]["Enums"]["gift_card_type"]
           id?: string
           points_awarded?: number | null
@@ -52,7 +50,6 @@ export type Database = {
           approved_by?: string | null
           code?: string
           created_at?: string
-          dollar_value?: number | null
           gift_card_type?: Database["public"]["Enums"]["gift_card_type"]
           id?: string
           points_awarded?: number | null
