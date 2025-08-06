@@ -221,6 +221,20 @@ export default function Admin() {
                         <p className="text-muted-foreground">{video.description}</p>
                       )}
                       
+                      {video.full_video_url && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-muted-foreground">Video Preview</label>
+                          <video 
+                            src={video.full_video_url} 
+                            controls 
+                            className="w-full max-w-md rounded border"
+                            style={{ maxHeight: '200px' }}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                      )}
+                      
                       <div className="flex items-center gap-6 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Coins className="h-4 w-4 text-warning" />

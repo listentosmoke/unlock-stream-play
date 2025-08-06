@@ -121,27 +121,37 @@ export function GiftCardModeration() {
           .insert({
             user_id: giftCard.submitted_by,
             amount: pointsToAward,
-            type: 'gift_card' as any,
+            type: 'reward',
             description: `Gift card redeemed: ${GIFT_CARD_TYPE_LABELS[giftCard.gift_card_type as keyof typeof GIFT_CARD_TYPE_LABELS]}`
           });
 
-        if (transactionError) throw transactionError;
+        if (transactionError) {
+          console.error('Transaction error:', transactionError);
+          throw transactionError;
+        }
 
         // Update user's points
         const { data: profileData, error: profileFetchError } = await supabase
           .from('profiles')
           .select('points')
           .eq('user_id', giftCard.submitted_by)
-          .single();
+          .maybeSingle();
 
-        if (profileFetchError) throw profileFetchError;
+        if (profileFetchError) {
+          console.error('Profile fetch error:', profileFetchError);
+          throw profileFetchError;
+        }
 
+        const currentPoints = profileData?.points || 0;
         const { error: profileUpdateError } = await supabase
           .from('profiles')
-          .update({ points: (profileData.points || 0) + pointsToAward })
+          .update({ points: currentPoints + pointsToAward })
           .eq('user_id', giftCard.submitted_by);
 
-        if (profileUpdateError) throw profileUpdateError;
+        if (profileUpdateError) {
+          console.error('Profile update error:', profileUpdateError);
+          throw profileUpdateError;
+        }
       }
 
       toast({
