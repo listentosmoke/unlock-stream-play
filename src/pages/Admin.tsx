@@ -7,9 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift, Trash2, Eye } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift, Trash2, Eye, BarChart3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { GiftCardModeration } from '@/components/admin/GiftCardModeration';
+import { UserManagement } from '@/components/admin/UserManagement';
+import { AdminStatistics } from '@/components/admin/AdminStatistics';
 
 export default function Admin() {
   const { user, userProfile } = useAuth();
@@ -224,25 +226,33 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue="giftcards" className="space-y-6">
-          <TabsList>
+        <Tabs defaultValue="users" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="users" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Users
+            </TabsTrigger>
             <TabsTrigger value="pending" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              Pending Videos ({pendingVideos.length})
+              Pending ({pendingVideos.length})
             </TabsTrigger>
             <TabsTrigger value="approved" className="flex items-center gap-2">
               <Video className="h-4 w-4" />
-              Approved Videos ({approvedVideos.length})
+              Approved ({approvedVideos.length})
             </TabsTrigger>
             <TabsTrigger value="giftcards" className="flex items-center gap-2">
               <Gift className="h-4 w-4" />
               Gift Cards
             </TabsTrigger>
             <TabsTrigger value="stats" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
+              <BarChart3 className="h-4 w-4" />
               Statistics
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="users" className="space-y-6">
+            <UserManagement />
+          </TabsContent>
 
           <TabsContent value="pending" className="space-y-6">
             {pendingVideos.length === 0 ? (
@@ -424,46 +434,7 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="stats" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Pending Reviews</CardTitle>
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{pendingVideos.length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    Videos awaiting approval
-                  </p>
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Videos</CardTitle>
-                  <Video className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">-</div>
-                  <p className="text-xs text-muted-foreground">
-                    All approved videos
-                  </p>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Active Users</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">-</div>
-                  <p className="text-xs text-muted-foreground">
-                    Registered users
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
+            <AdminStatistics />
           </TabsContent>
         </Tabs>
       </main>
