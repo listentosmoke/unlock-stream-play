@@ -129,16 +129,19 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
     >
       <div className="relative aspect-video bg-video-bg overflow-hidden">
         {video.thumbnail_url ? (
-          <img 
-            src={video.thumbnail_url} 
-            alt={video.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-            onLoad={() => console.log('Thumbnail loaded successfully:', video.thumbnail_url)}
-            onError={(e) => {
-              console.log('Thumbnail failed to load:', video.thumbnail_url);
-              e.currentTarget.style.display = 'none';
-            }}
-          />
+          <div>
+            <img 
+              src={video.thumbnail_url} 
+              alt={video.title}
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              onLoad={() => console.log('✅ Thumbnail loaded successfully:', video.thumbnail_url)}
+              onError={(e) => {
+                console.error('❌ Thumbnail failed to load:', video.thumbnail_url, e);
+                // Show placeholder instead of hiding
+                e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQwIiBoZWlnaHQ9IjM2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjMzMzIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyNCIgZmlsbD0iI2ZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Tm8gVGh1bWJuYWlsPC90ZXh0Pjwvc3ZnPg==';
+              }}
+            />
+          </div>
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
             <Play className="h-16 w-16 text-primary/50" />
