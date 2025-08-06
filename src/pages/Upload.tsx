@@ -1,0 +1,198 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/components/auth/AuthContext';
+import { Header } from '@/components/layout/Header';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { Upload as UploadIcon, Video } from 'lucide-react';
+
+export default function Upload() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    unlockCost: 10,
+    rewardPoints: 5
+  });
+
+  // Redirect if not authenticated
+  if (!user) {
+    navigate('/auth');
+    return null;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.title.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a video title",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('videos')
+        .insert({
+          uploader_id: user.id,
+          title: formData.title,
+          description: formData.description,
+          unlock_cost: formData.unlockCost,
+          reward_points: formData.rewardPoints,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: "Your video has been submitted for review",
+      });
+
+      navigate('/');
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload video",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <Video className="h-16 w-16 text-primary mx-auto mb-4" />
+            <h1 className="text-3xl font-bold mb-2">Upload Video</h1>
+            <p className="text-muted-foreground">
+              Share your content and earn points when approved by admins
+            </p>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Video Details</CardTitle>
+              <CardDescription>
+                Fill in the information about your video. It will be reviewed by admins before going live.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <label htmlFor="title" className="text-sm font-medium">
+                    Title *
+                  </label>
+                  <Input
+                    id="title"
+                    placeholder="Enter video title"
+                    value={formData.title}
+                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="description" className="text-sm font-medium">
+                    Description
+                  </label>
+                  <Textarea
+                    id="description"
+                    placeholder="Describe your video..."
+                    value={formData.description}
+                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                    rows={4}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label htmlFor="unlockCost" className="text-sm font-medium">
+                      Unlock Cost (Points)
+                    </label>
+                    <Input
+                      id="unlockCost"
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={formData.unlockCost}
+                      onChange={(e) => setFormData(prev => ({ ...prev, unlockCost: parseInt(e.target.value) || 10 }))}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label htmlFor="rewardPoints" className="text-sm font-medium">
+                      Creator Reward (Points)
+                    </label>
+                    <Input
+                      id="rewardPoints"
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={formData.rewardPoints}
+                      onChange={(e) => setFormData(prev => ({ ...prev, rewardPoints: parseInt(e.target.value) || 5 }))}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-muted p-4 rounded-lg">
+                  <h3 className="font-medium mb-2">How it works:</h3>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Your video will be reviewed by admins</li>
+                    <li>• Once approved, you'll earn {formData.rewardPoints} points</li>
+                    <li>• Users can unlock your video for {formData.unlockCost} points</li>
+                    <li>• You'll earn additional points for each unlock</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-4">
+                  <Button 
+                    type="submit" 
+                    disabled={loading}
+                    className="flex-1"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <UploadIcon className="h-4 w-4 mr-2" />
+                        Submit for Review
+                      </>
+                    )}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={() => navigate('/')}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    </div>
+  );
+}
