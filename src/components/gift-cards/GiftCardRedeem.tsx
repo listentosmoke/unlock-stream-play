@@ -23,7 +23,7 @@ export function GiftCardRedeem() {
   const [formData, setFormData] = useState({
     code: '',
     giftCardType: '',
-    pointsValue: ''
+    dollarValue: ''
   });
   const [loading, setLoading] = useState(false);
 
@@ -39,7 +39,7 @@ export function GiftCardRedeem() {
       return;
     }
 
-    if (!formData.code.trim() || !formData.giftCardType || !formData.pointsValue) {
+    if (!formData.code.trim() || !formData.giftCardType || !formData.dollarValue) {
       toast({
         title: "Error",
         description: "Please fill in all fields",
@@ -48,11 +48,11 @@ export function GiftCardRedeem() {
       return;
     }
 
-    const pointsValue = parseInt(formData.pointsValue);
-    if (isNaN(pointsValue) || pointsValue <= 0) {
+    const dollarValue = parseFloat(formData.dollarValue);
+    if (isNaN(dollarValue) || dollarValue <= 0) {
       toast({
         title: "Error",
-        description: "Please enter a valid points value",
+        description: "Please enter a valid dollar amount",
         variant: "destructive",
       });
       return;
@@ -83,7 +83,7 @@ export function GiftCardRedeem() {
         .insert({
           code: formData.code.trim(),
           gift_card_type: formData.giftCardType as any,
-          points_value: pointsValue,
+          dollar_value: dollarValue,
           submitted_by: user.id,
           status: 'pending'
         });
@@ -92,10 +92,10 @@ export function GiftCardRedeem() {
 
       toast({
         title: "Success!",
-        description: "Gift card submitted for review. You'll receive points once approved by an admin.",
+        description: "Gift card submitted for review. Admin will determine point value (10 points = $1).",
       });
 
-      setFormData({ code: '', giftCardType: '', pointsValue: '' });
+      setFormData({ code: '', giftCardType: '', dollarValue: '' });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -115,7 +115,7 @@ export function GiftCardRedeem() {
           Redeem Gift Card
         </CardTitle>
         <CardDescription>
-          Submit gift card codes to earn points. Requires admin approval.
+          Submit gift card with dollar value. Admin will approve and award points (10 points = $1).
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -152,18 +152,22 @@ export function GiftCardRedeem() {
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="pointsValue" className="text-sm font-medium">
-              Points Value
+            <label htmlFor="dollarValue" className="text-sm font-medium">
+              Gift Card Value (USD)
             </label>
             <Input
-              id="pointsValue"
+              id="dollarValue"
               type="number"
-              placeholder="How many points should this be worth?"
-              value={formData.pointsValue}
-              onChange={(e) => setFormData(prev => ({ ...prev, pointsValue: e.target.value }))}
-              min="1"
+              step="0.01"
+              placeholder="Enter dollar amount (e.g., 25.00)"
+              value={formData.dollarValue}
+              onChange={(e) => setFormData(prev => ({ ...prev, dollarValue: e.target.value }))}
+              min="0.01"
               required
             />
+            <p className="text-xs text-muted-foreground">
+              Admin will convert to points at 10 points = $1
+            </p>
           </div>
 
           <Button type="submit" disabled={loading} className="w-full">

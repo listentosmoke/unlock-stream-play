@@ -107,7 +107,7 @@ export function GiftCardHistory() {
                       Code: {card.code.substring(0, 4)}...{card.code.substring(card.code.length - 4)}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {card.points_value} points • {new Date(card.created_at).toLocaleDateString()}
+                      ${card.dollar_value} • {card.points_awarded || 0} points • {new Date(card.created_at).toLocaleDateString()}
                     </p>
                   </div>
                 </div>

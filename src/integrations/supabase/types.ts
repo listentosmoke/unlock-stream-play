@@ -16,11 +16,14 @@ export type Database = {
     Tables: {
       gift_cards: {
         Row: {
+          approved_at: string | null
+          approved_by: string | null
           code: string
           created_at: string
+          dollar_value: number | null
           gift_card_type: Database["public"]["Enums"]["gift_card_type"]
           id: string
-          points_value: number
+          points_awarded: number | null
           redeemed_at: string | null
           redeemed_by: string | null
           status: string
@@ -29,11 +32,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
           code: string
           created_at?: string
+          dollar_value?: number | null
           gift_card_type: Database["public"]["Enums"]["gift_card_type"]
           id?: string
-          points_value: number
+          points_awarded?: number | null
           redeemed_at?: string | null
           redeemed_by?: string | null
           status?: string
@@ -42,11 +48,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approved_at?: string | null
+          approved_by?: string | null
           code?: string
           created_at?: string
+          dollar_value?: number | null
           gift_card_type?: Database["public"]["Enums"]["gift_card_type"]
           id?: string
-          points_value?: number
+          points_awarded?: number | null
           redeemed_at?: string | null
           redeemed_by?: string | null
           status?: string

@@ -10,6 +10,7 @@ import Upload from "./pages/Upload";
 import Admin from "./pages/Admin";
 import GiftCards from "./pages/GiftCards";
 import About from "./pages/About";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/gift-cards" element={<GiftCards />} />
             <Route path="/about" element={<About />} />
+            <Route path="/profile" element={<Profile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/components/auth/AuthContext';
 import { CheckCircle, XCircle, Clock, Gift, Coins } from 'lucide-react';
 
 const GIFT_CARD_TYPE_LABELS = {
@@ -16,9 +18,11 @@ const GIFT_CARD_TYPE_LABELS = {
 };
 
 export function GiftCardModeration() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [pendingGiftCards, setPendingGiftCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pointsOverride, setPointsOverride] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
     fetchPendingGiftCards();
@@ -49,28 +53,43 @@ export function GiftCardModeration() {
       const giftCard = pendingGiftCards.find(g => g.id === giftCardId);
       if (!giftCard) return;
 
+      let pointsToAward = 0;
+      
+      if (action === 'approved') {
+        // Use admin override or calculate from dollar value (10 points = $1)
+        const override = pointsOverride[giftCardId];
+        if (override && !isNaN(parseInt(override))) {
+          pointsToAward = parseInt(override);
+        } else {
+          pointsToAward = Math.round(giftCard.dollar_value * 10);
+        }
+      }
+
       // Update gift card status
       const { error: updateError } = await supabase
         .from('gift_cards')
         .update({ 
           status: action,
           redeemed_by: action === 'approved' ? giftCard.submitted_by : null,
-          redeemed_at: action === 'approved' ? new Date().toISOString() : null
+          redeemed_at: action === 'approved' ? new Date().toISOString() : null,
+          points_awarded: pointsToAward,
+          approved_by: user?.id,
+          approved_at: action === 'approved' ? new Date().toISOString() : null
         })
         .eq('id', giftCardId);
 
       if (updateError) throw updateError;
 
       // If approved, reward the user with points
-      if (action === 'approved') {
+      if (action === 'approved' && pointsToAward > 0) {
         // Create transaction record
         const { error: transactionError } = await supabase
           .from('transactions')
           .insert({
             user_id: giftCard.submitted_by,
-            amount: giftCard.points_value,
+            amount: pointsToAward,
             type: 'gift_card' as any,
-            description: `Gift card redeemed: ${GIFT_CARD_TYPE_LABELS[giftCard.gift_card_type as keyof typeof GIFT_CARD_TYPE_LABELS]} (${giftCard.code.substring(0, 4)}...)`
+            description: `Gift card redeemed: ${GIFT_CARD_TYPE_LABELS[giftCard.gift_card_type as keyof typeof GIFT_CARD_TYPE_LABELS]} ($${giftCard.dollar_value})`
           });
 
         if (transactionError) throw transactionError;
@@ -86,7 +105,7 @@ export function GiftCardModeration() {
 
         const { error: profileUpdateError } = await supabase
           .from('profiles')
-          .update({ points: (profileData.points || 0) + giftCard.points_value })
+          .update({ points: (profileData.points || 0) + pointsToAward })
           .eq('user_id', giftCard.submitted_by);
 
         if (profileUpdateError) throw profileUpdateError;
@@ -148,18 +167,33 @@ export function GiftCardModeration() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-muted-foreground">Gift Card Code</label>
-                    <div className="font-mono bg-muted p-3 rounded border">
+                    <div className="font-mono bg-muted p-3 rounded border text-sm">
                       {giftCard.code}
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Requested Points</label>
+                    <label className="text-sm font-medium text-muted-foreground">Dollar Value</label>
                     <div className="flex items-center gap-2">
+                      <span className="font-semibold text-lg">${giftCard.dollar_value}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-muted-foreground">Points to Award</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        placeholder={`${Math.round(giftCard.dollar_value * 10)}`}
+                        value={pointsOverride[giftCard.id] || ''}
+                        onChange={(e) => setPointsOverride(prev => ({ ...prev, [giftCard.id]: e.target.value }))}
+                        className="w-24"
+                      />
                       <Coins className="h-4 w-4 text-warning" />
-                      <span className="font-semibold">{giftCard.points_value} points</span>
+                      <span className="text-sm text-muted-foreground">
+                        (Default: {Math.round(giftCard.dollar_value * 10)})
+                      </span>
                     </div>
                   </div>
                 </div>
