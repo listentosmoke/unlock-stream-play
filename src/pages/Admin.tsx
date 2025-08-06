@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift, Trash2 } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift, Trash2, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { GiftCardModeration } from '@/components/admin/GiftCardModeration';
 
@@ -16,6 +16,7 @@ export default function Admin() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [pendingVideos, setPendingVideos] = useState<any[]>([]);
+  const [approvedVideos, setApprovedVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Redirect if not admin - only after loading completes
@@ -36,6 +37,7 @@ export default function Admin() {
     console.log('Admin - userProfile:', userProfile);
     if (userProfile?.role === 'admin') {
       fetchPendingVideos();
+      fetchApprovedVideos();
     }
   }, [userProfile]);
 
@@ -80,9 +82,48 @@ export default function Admin() {
     }
   };
 
+  const fetchApprovedVideos = async () => {
+    try {
+      // First get approved videos
+      const { data: videos, error: videosError } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
+
+      if (videosError) throw videosError;
+
+      // Then get profiles for uploaders
+      if (videos && videos.length > 0) {
+        const userIds = videos.map(v => v.uploader_id);
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('user_id, username, display_name')
+          .in('user_id', userIds);
+
+        if (profilesError) throw profilesError;
+
+        // Combine data
+        const combinedData = videos.map(v => {
+          const profile = profiles?.find(p => p.user_id === v.uploader_id);
+          return {
+            ...v,
+            profiles: profile || { username: 'Unknown', display_name: 'Unknown User' }
+          };
+        });
+
+        setApprovedVideos(combinedData);
+      } else {
+        setApprovedVideos([]);
+      }
+    } catch (error) {
+      console.error('Error fetching approved videos:', error);
+    }
+  };
+
   const handleVideoAction = async (videoId: string, action: 'approved' | 'rejected' | 'delete') => {
     try {
-      const video = pendingVideos.find(v => v.id === videoId);
+      const video = pendingVideos.find(v => v.id === videoId) || approvedVideos.find(v => v.id === videoId);
       if (!video) return;
 
       if (action === 'delete') {
@@ -141,6 +182,7 @@ export default function Admin() {
       });
 
       fetchPendingVideos();
+      fetchApprovedVideos();
     } catch (error: any) {
       toast({
         title: "Error",
@@ -187,6 +229,10 @@ export default function Admin() {
             <TabsTrigger value="pending" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
               Pending Videos ({pendingVideos.length})
+            </TabsTrigger>
+            <TabsTrigger value="approved" className="flex items-center gap-2">
+              <Video className="h-4 w-4" />
+              Approved Videos ({approvedVideos.length})
             </TabsTrigger>
             <TabsTrigger value="giftcards" className="flex items-center gap-2">
               <Gift className="h-4 w-4" />
@@ -279,6 +325,85 @@ export default function Admin() {
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="approved" className="space-y-6">
+            {approvedVideos.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-16">
+                  <Video className="h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">No approved videos</h3>
+                  <p className="text-muted-foreground text-center">
+                    No videos have been approved yet.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {approvedVideos.map((video) => (
+                  <Card key={video.id}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-xl">{video.title}</CardTitle>
+                          <CardDescription className="mt-1">
+                            Uploaded by {video.profiles?.display_name || video.profiles?.username || 'Unknown User'}
+                          </CardDescription>
+                        </div>
+                        <Badge className="bg-success text-success-foreground flex items-center gap-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Approved
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {video.description && (
+                        <p className="text-muted-foreground">{video.description}</p>
+                      )}
+                      
+                      {video.full_video_url && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-muted-foreground">Video Preview</label>
+                          <video 
+                            src={video.full_video_url} 
+                            controls 
+                            className="w-full max-w-md rounded border"
+                            style={{ maxHeight: '200px' }}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Coins className="h-4 w-4 text-warning" />
+                          Unlock Cost: {video.unlock_cost} points
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Coins className="h-4 w-4 text-success" />
+                          Creator Reward: {video.reward_points} points
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Eye className="h-4 w-4 text-primary" />
+                          {video.unlock_count} unlocks
+                        </span>
+                      </div>
+
+                      <div className="flex gap-4 pt-4">
+                        <Button
+                          onClick={() => handleVideoAction(video.id, 'delete')}
+                          variant="destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Video
                         </Button>
                       </div>
                     </CardContent>

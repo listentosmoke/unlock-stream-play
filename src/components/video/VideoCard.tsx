@@ -24,9 +24,10 @@ interface VideoCardProps {
   };
   isUnlocked?: boolean;
   onUnlock?: () => void;
+  onClick?: () => void;
 }
 
-export function VideoCard({ video, isUnlocked = false, onUnlock }: VideoCardProps) {
+export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: VideoCardProps) {
   const [loading, setLoading] = useState(false);
   const { user, userProfile, refreshProfile } = useAuth();
   const { toast } = useToast();
@@ -110,7 +111,10 @@ export function VideoCard({ video, isUnlocked = false, onUnlock }: VideoCardProp
   };
 
   return (
-    <Card className="group overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10">
+    <Card 
+      className="group overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 cursor-pointer" 
+      onClick={onClick}
+    >
       <div className="relative aspect-video bg-video-bg overflow-hidden">
         {video.thumbnail_url ? (
           <img 
@@ -184,7 +188,10 @@ export function VideoCard({ video, isUnlocked = false, onUnlock }: VideoCardProp
 
           {!isUnlocked && user && (
             <Button 
-              onClick={handleUnlock}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUnlock();
+              }}
               disabled={loading || !userProfile || userProfile.points < video.unlock_cost}
               className="w-full"
               variant="outline"
