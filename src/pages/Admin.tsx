@@ -18,8 +18,10 @@ export default function Admin() {
   const [pendingVideos, setPendingVideos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Redirect if not admin
+  // Redirect if not admin - only after loading completes
   useEffect(() => {
+    if (loading) return; // Don't redirect while still loading
+    
     if (!user) {
       navigate('/auth');
       return;
@@ -28,7 +30,7 @@ export default function Admin() {
       navigate('/');
       return;
     }
-  }, [user, userProfile, navigate]);
+  }, [user, userProfile, navigate, loading]);
 
   useEffect(() => {
     if (userProfile?.role === 'admin') {
@@ -42,7 +44,7 @@ export default function Admin() {
         .from('videos')
         .select(`
           *,
-          profiles!videos_uploader_id_fkey(username, display_name)
+          profiles!inner(username, display_name)
         `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
