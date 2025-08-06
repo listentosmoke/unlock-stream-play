@@ -7,34 +7,75 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Lock, Mail, User, Video } from 'lucide-react';
+import { CaptchaChallenge } from '@/components/auth/CaptchaChallenge';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
+  const [captchaValid, setCaptchaValid] = useState(false);
   const { signUp, signIn } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || !username) return;
+    
+    if (!email || !password || !username) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!captchaValid) {
+      toast({
+        title: "Error",
+        description: "Please complete the security check",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     const { error } = await signUp(email, password, username);
     
     if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      // Handle specific error cases
+      if (error.message.includes('User already registered')) {
+        // User exists, try to sign them in
+        const { error: signInError } = await signIn(email, password);
+        if (!signInError) {
+          toast({
+            title: "Welcome back!",
+            description: "You're now signed in",
+          });
+          navigate('/');
+        } else {
+          toast({
+            title: "Account exists",
+            description: "This email is already registered. Please sign in instead.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     } else {
       toast({
         title: "Success!",
-        description: "Please check your email to confirm your account.",
+        description: "Account created! You're now signed in.",
       });
+      setCaptchaValid(false);
+      // Auto-navigate to home
+      navigate('/');
     }
     setLoading(false);
   };
@@ -165,10 +206,13 @@ export default function Auth() {
                       />
                     </div>
                   </div>
+                  
+                  <CaptchaChallenge onVerify={setCaptchaValid} className="mb-4" />
+                  
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={loading}
+                    disabled={loading || !captchaValid}
                     variant="default"
                   >
                     {loading ? 'Creating account...' : 'Create Account'}

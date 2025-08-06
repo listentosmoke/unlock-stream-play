@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthContext';
-import { Video, Coins, Upload, Settings, LogOut, User } from 'lucide-react';
+import { Video, Coins, Upload, Settings, LogOut, User, Gift } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,11 +37,18 @@ export function Header() {
                 </div>
               )}
 
-              {/* Upload button */}
+              {/* Action buttons */}
               <Button variant="outline" size="sm" asChild>
                 <Link to="/upload">
                   <Upload className="h-4 w-4 mr-2" />
                   Upload
+                </Link>
+              </Button>
+              
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/gift-cards">
+                  <Gift className="h-4 w-4 mr-2" />
+                  Gift Cards
                 </Link>
               </Button>
 

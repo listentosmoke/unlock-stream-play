@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Clock, Users, Video, Coins } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { GiftCardModeration } from '@/components/admin/GiftCardModeration';
 
 export default function Admin() {
   const { user, userProfile } = useAuth();
@@ -152,6 +153,10 @@ export default function Admin() {
               <Clock className="h-4 w-4" />
               Pending Videos ({pendingVideos.length})
             </TabsTrigger>
+            <TabsTrigger value="giftcards" className="flex items-center gap-2">
+              <Gift className="h-4 w-4" />
+              Gift Cards
+            </TabsTrigger>
             <TabsTrigger value="stats" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Statistics
@@ -224,6 +229,16 @@ export default function Admin() {
                 ))}
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="giftcards" className="space-y-6">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold mb-2">Gift Card Moderation</h2>
+              <p className="text-muted-foreground">
+                Review and approve gift card submissions to award points to users.
+              </p>
+            </div>
+            <GiftCardModeration />
           </TabsContent>
 
           <TabsContent value="stats" className="space-y-6">

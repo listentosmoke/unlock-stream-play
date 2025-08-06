@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      gift_cards: {
+        Row: {
+          code: string
+          created_at: string
+          gift_card_type: Database["public"]["Enums"]["gift_card_type"]
+          id: string
+          points_value: number
+          redeemed_at: string | null
+          redeemed_by: string | null
+          status: string
+          submitted_at: string
+          submitted_by: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          gift_card_type: Database["public"]["Enums"]["gift_card_type"]
+          id?: string
+          points_value: number
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          gift_card_type?: Database["public"]["Enums"]["gift_card_type"]
+          id?: string
+          points_value?: number
+          redeemed_at?: string | null
+          redeemed_by?: string | null
+          status?: string
+          submitted_at?: string
+          submitted_by?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -182,6 +224,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      gift_card_type:
+        | "amazon"
+        | "google_play"
+        | "apple"
+        | "steam"
+        | "visa"
+        | "paypal"
       transaction_type: "purchase" | "reward" | "unlock"
       user_role: "user" | "admin" | "moderator"
       video_status: "pending" | "approved" | "rejected"
@@ -312,6 +361,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      gift_card_type: [
+        "amazon",
+        "google_play",
+        "apple",
+        "steam",
+        "visa",
+        "paypal",
+      ],
       transaction_type: ["purchase", "reward", "unlock"],
       user_role: ["user", "admin", "moderator"],
       video_status: ["pending", "approved", "rejected"],

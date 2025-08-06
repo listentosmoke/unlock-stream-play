@@ -17,9 +17,7 @@ export default function Upload() {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
-    description: '',
-    unlockCost: 10,
-    rewardPoints: 5
+    description: ''
   });
 
   // Redirect if not authenticated
@@ -49,8 +47,8 @@ export default function Upload() {
           uploader_id: user.id,
           title: formData.title,
           description: formData.description,
-          unlock_cost: formData.unlockCost,
-          reward_points: formData.rewardPoints,
+          unlock_cost: 10,
+          reward_points: 5,
           status: 'pending'
         });
 
@@ -122,33 +120,17 @@ export default function Upload() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label htmlFor="unlockCost" className="text-sm font-medium">
-                      Unlock Cost (Points)
-                    </label>
-                    <Input
-                      id="unlockCost"
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={formData.unlockCost}
-                      onChange={(e) => setFormData(prev => ({ ...prev, unlockCost: parseInt(e.target.value) || 10 }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label htmlFor="rewardPoints" className="text-sm font-medium">
-                      Creator Reward (Points)
-                    </label>
-                    <Input
-                      id="rewardPoints"
-                      type="number"
-                      min="1"
-                      max="50"
-                      value={formData.rewardPoints}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rewardPoints: parseInt(e.target.value) || 5 }))}
-                    />
+                <div className="bg-muted p-4 rounded-lg">
+                  <h3 className="font-medium mb-2">Fixed Pricing:</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span>Unlock Cost:</span>
+                      <span className="font-semibold text-warning">10 points</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Creator Reward:</span>
+                      <span className="font-semibold text-success">5 points</span>
+                    </div>
                   </div>
                 </div>
 
@@ -156,8 +138,8 @@ export default function Upload() {
                   <h3 className="font-medium mb-2">How it works:</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
                     <li>• Your video will be reviewed by admins</li>
-                    <li>• Once approved, you'll earn {formData.rewardPoints} points</li>
-                    <li>• Users can unlock your video for {formData.unlockCost} points</li>
+                    <li>• Once approved, you'll earn 5 points</li>
+                    <li>• Users can unlock your video for 10 points</li>
                     <li>• You'll earn additional points for each unlock</li>
                   </ul>
                 </div>
