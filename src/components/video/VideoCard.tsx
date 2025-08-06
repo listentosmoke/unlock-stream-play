@@ -133,37 +133,16 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
             hasThumbnailUrl: !!video.thumbnail_url, 
             hasFullVideoUrl: !!video.full_video_url,
             thumbnailUrl: video.thumbnail_url,
-            fullVideoUrl: video.full_video_url?.substring(0, 50) + '...'
+            videoTitle: video.title
           });
           
-          if (video.thumbnail_url) {
-            return (
-              <img 
-                src={video.thumbnail_url} 
-                alt={video.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                onError={(e) => {
-                  console.log('Thumbnail image failed to load:', video.thumbnail_url);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            );
-          } else if (video.full_video_url) {
-            return (
-              <VideoThumbnail 
-                videoUrl={video.full_video_url}
-                alt={video.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            );
-          } else {
-            return (
-              <VideoPlaceholder 
-                title={video.title}
-                className="w-full h-full"
-              />
-            );
-          }
+          // Always show VideoPlaceholder as a fallback for now to debug
+          return (
+            <VideoPlaceholder 
+              title={video.title}
+              className="w-full h-full"
+            />
+          );
         })()}
         
         {/* Duration badge */}
