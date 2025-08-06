@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Upload as UploadIcon, Video, FileVideo } from 'lucide-react';
+import { generateVideoThumbnail } from '@/utils/thumbnailGenerator';
 
 export default function Upload() {
   const { user } = useAuth();
@@ -64,6 +65,9 @@ export default function Upload() {
     setLoading(true);
 
     try {
+      // Generate thumbnail from video first
+      const thumbnailBlob = await generateVideoThumbnail(videoFile);
+      
       // Upload video file to storage
       const fileExt = videoFile.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
@@ -74,10 +78,22 @@ export default function Upload() {
 
       if (uploadError) throw uploadError;
 
-      // Get public URL for the video
-      const { data: { publicUrl } } = supabase.storage
+      // Upload thumbnail
+      const thumbnailFileName = `thumbnails/${user.id}/${Date.now()}-thumbnail.jpg`;
+      const { error: thumbnailUploadError } = await supabase.storage
+        .from('videos')
+        .upload(thumbnailFileName, thumbnailBlob);
+
+      if (thumbnailUploadError) throw thumbnailUploadError;
+
+      // Get public URLs
+      const { data: { publicUrl: videoUrl } } = supabase.storage
         .from('videos')
         .getPublicUrl(fileName);
+
+      const { data: { publicUrl: thumbnailUrl } } = supabase.storage
+        .from('videos')
+        .getPublicUrl(thumbnailFileName);
 
       // Insert video record
       const { data: insertData, error } = await supabase
@@ -86,7 +102,8 @@ export default function Upload() {
           uploader_id: user.id,
           title: formData.title,
           description: formData.description,
-          full_video_url: publicUrl,
+          full_video_url: videoUrl,
+          thumbnail_url: thumbnailUrl,
           unlock_cost: 10,
           reward_points: 5,
           status: 'pending'
@@ -95,22 +112,6 @@ export default function Upload() {
         .single();
 
       if (error) throw error;
-
-      // Generate thumbnail in background
-      if (insertData?.id) {
-        try {
-          await supabase.functions.invoke('generate-thumbnail', {
-            body: {
-              videoId: insertData.id,
-              videoUrl: publicUrl
-            }
-          });
-          console.log('Thumbnail generation started for video:', insertData.id);
-        } catch (thumbnailError) {
-          console.error('Error starting thumbnail generation:', thumbnailError);
-          // Don't fail the upload if thumbnail generation fails
-        }
-      }
 
       toast({
         title: "Success!",
