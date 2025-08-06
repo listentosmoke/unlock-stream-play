@@ -33,6 +33,7 @@ export default function Admin() {
   }, [user, userProfile, navigate, loading]);
 
   useEffect(() => {
+    console.log('Admin - userProfile:', userProfile);
     if (userProfile?.role === 'admin') {
       fetchPendingVideos();
     }

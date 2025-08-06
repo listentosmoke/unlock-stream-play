@@ -18,17 +18,23 @@ const GIFT_CARD_TYPE_LABELS = {
 };
 
 export function GiftCardModeration() {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const { toast } = useToast();
   const [pendingGiftCards, setPendingGiftCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pointsOverride, setPointsOverride] = useState<{ [key: string]: string }>({});
 
   useEffect(() => {
-    fetchPendingGiftCards();
-  }, []);
+    console.log('GiftCardModeration - user:', user?.id, 'userProfile:', userProfile);
+    if (userProfile?.role === 'admin') {
+      fetchPendingGiftCards();
+    } else {
+      setLoading(false);
+    }
+  }, [userProfile]);
 
   const fetchPendingGiftCards = async () => {
+    console.log('Fetching pending gift cards...');
     try {
       const { data, error } = await supabase
         .from('gift_cards')
@@ -39,6 +45,7 @@ export function GiftCardModeration() {
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
+      console.log('Gift cards query result:', { data, error });
       if (error) throw error;
       setPendingGiftCards(data || []);
     } catch (error) {
