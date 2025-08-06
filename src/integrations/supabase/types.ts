@@ -14,7 +14,166 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          points: number
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          points?: number
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          points?: number
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          id: string
+          stripe_session_id: string | null
+          type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          stripe_session_id?: string | null
+          type: Database["public"]["Enums"]["transaction_type"]
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          stripe_session_id?: string | null
+          type?: Database["public"]["Enums"]["transaction_type"]
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_unlocks: {
+        Row: {
+          id: string
+          unlocked_at: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          id?: string
+          unlocked_at?: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          id?: string
+          unlocked_at?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_unlocks_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          created_at: string
+          description: string | null
+          duration: number | null
+          full_video_url: string | null
+          id: string
+          preview_url: string | null
+          reward_points: number
+          status: Database["public"]["Enums"]["video_status"]
+          thumbnail_url: string | null
+          title: string
+          unlock_cost: number
+          unlock_count: number
+          updated_at: string
+          uploader_id: string
+          view_count: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          duration?: number | null
+          full_video_url?: string | null
+          id?: string
+          preview_url?: string | null
+          reward_points?: number
+          status?: Database["public"]["Enums"]["video_status"]
+          thumbnail_url?: string | null
+          title: string
+          unlock_cost?: number
+          unlock_count?: number
+          updated_at?: string
+          uploader_id: string
+          view_count?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          duration?: number | null
+          full_video_url?: string | null
+          id?: string
+          preview_url?: string | null
+          reward_points?: number
+          status?: Database["public"]["Enums"]["video_status"]
+          thumbnail_url?: string | null
+          title?: string
+          unlock_cost?: number
+          unlock_count?: number
+          updated_at?: string
+          uploader_id?: string
+          view_count?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +182,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      transaction_type: "purchase" | "reward" | "unlock"
+      user_role: "user" | "admin" | "moderator"
+      video_status: "pending" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +311,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      transaction_type: ["purchase", "reward", "unlock"],
+      user_role: ["user", "admin", "moderator"],
+      video_status: ["pending", "approved", "rejected"],
+    },
   },
 } as const
