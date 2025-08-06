@@ -34,7 +34,7 @@ export function GiftCardModeration() {
         .from('gift_cards')
         .select(`
           *,
-          profiles!gift_cards_submitted_by_fkey(username, display_name)
+          profiles!inner(username, display_name)
         `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
