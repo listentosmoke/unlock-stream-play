@@ -15,6 +15,7 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    console.log('VideoThumbnail useEffect triggered:', { videoUrl, loading, error });
     setLoading(true);
     setError(false);
     setThumbnailUrl('');
@@ -22,7 +23,14 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
   }, [videoUrl]);
 
   const generateThumbnail = async () => {
+    console.log('generateThumbnail called:', { videoUrl, hasVideoRef: !!videoRef.current, hasCanvasRef: !!canvasRef.current });
+    
     if (!videoRef.current || !canvasRef.current || !videoUrl) {
+      console.log('generateThumbnail early return:', { 
+        hasVideoRef: !!videoRef.current, 
+        hasCanvasRef: !!canvasRef.current, 
+        hasVideoUrl: !!videoUrl 
+      });
       setLoading(false);
       setError(true);
       return;
@@ -41,6 +49,7 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
     let hasLoaded = false;
 
     const handleLoadedData = () => {
+      console.log('Video loadedData event fired');
       if (hasLoaded) return;
       hasLoaded = true;
       
@@ -49,14 +58,21 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 360;
         
+        console.log('Canvas dimensions set:', { width: canvas.width, height: canvas.height });
+        
         // Draw the first frame
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        console.log('Video frame drawn to canvas');
         
         // Convert to blob and create URL
         canvas.toBlob((blob) => {
           if (blob) {
             const url = URL.createObjectURL(blob);
+            console.log('Thumbnail blob created:', { size: blob.size, url });
             setThumbnailUrl(url);
+          } else {
+            console.error('Failed to create blob from canvas');
+            setError(true);
           }
           setLoading(false);
         }, 'image/jpeg', 0.8);
@@ -74,12 +90,14 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
     };
 
     const handleTimeUpdate = () => {
+      console.log('Video timeupdate event fired:', { currentTime: video.currentTime });
       if (video.currentTime > 0) {
         handleLoadedData();
       }
     };
 
     // Add event listeners
+    console.log('Adding event listeners to video element');
     video.addEventListener('loadeddata', handleLoadedData);
     video.addEventListener('loadedmetadata', handleLoadedData);
     video.addEventListener('timeupdate', handleTimeUpdate);
@@ -95,6 +113,7 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
 
     try {
       // Set video properties
+      console.log('Setting video properties and source:', videoUrl);
       video.crossOrigin = 'anonymous';
       video.muted = true;
       video.playsInline = true;
@@ -107,6 +126,7 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
       // Fallback timeout
       setTimeout(() => {
         if (loading && !hasLoaded) {
+          console.warn('Thumbnail generation timeout after 10 seconds');
           cleanup();
           setError(true);
           setLoading(false);
@@ -121,6 +141,8 @@ export function VideoThumbnail({ videoUrl, alt, className }: VideoThumbnailProps
       return cleanup;
     }
   };
+
+  console.log('VideoThumbnail render:', { loading, error, thumbnailUrl: !!thumbnailUrl, videoUrl });
 
   // Cleanup on unmount
   useEffect(() => {

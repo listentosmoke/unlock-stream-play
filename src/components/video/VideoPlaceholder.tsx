@@ -6,6 +6,8 @@ interface VideoPlaceholderProps {
 }
 
 export function VideoPlaceholder({ title, className }: VideoPlaceholderProps) {
+  console.log('VideoPlaceholder rendered for:', title);
+  
   // Generate a color based on the title
   const getColorFromTitle = (title: string) => {
     let hash = 0;
