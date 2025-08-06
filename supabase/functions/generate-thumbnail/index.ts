@@ -36,11 +36,11 @@ serve(async (req) => {
     const thumbnailBuffer = await generateThumbnailFromVideo(videoUrl, videoId)
     
     // Upload thumbnail to storage
-    const thumbnailFileName = `${videoId}-thumbnail.jpg`
+    const thumbnailFileName = `${videoId}-thumbnail.svg`
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('videos')
       .upload(`thumbnails/${thumbnailFileName}`, thumbnailBuffer, {
-        contentType: 'image/jpeg',
+        contentType: 'image/svg+xml',
         upsert: true
       })
 
@@ -89,17 +89,11 @@ serve(async (req) => {
 
 async function generateThumbnailFromVideo(videoUrl: string, videoId: string): Promise<Uint8Array> {
   try {
-    // Try to use FFmpeg via a web service or create a canvas-based approach
-    // For now, we'll create a better placeholder that looks like a video thumbnail
+    // Generate a proper SVG-based thumbnail
+    const width = 640
+    const height = 360
     
-    const canvas = new OffscreenCanvas(640, 360)
-    const ctx = canvas.getContext('2d')
-    
-    if (!ctx) {
-      throw new Error('Could not get canvas context')
-    }
-
-    // Create gradient background based on video ID
+    // Generate colors based on video ID
     let hash = 0
     for (let i = 0; i < videoId.length; i++) {
       hash = videoId.charCodeAt(i) + ((hash << 5) - hash)
@@ -108,45 +102,65 @@ async function generateThumbnailFromVideo(videoUrl: string, videoId: string): Pr
     const hue1 = Math.abs(hash) % 360
     const hue2 = (hue1 + 60) % 360
     
-    const gradient = ctx.createLinearGradient(0, 0, 640, 360)
-    gradient.addColorStop(0, `hsl(${hue1}, 70%, 50%)`)
-    gradient.addColorStop(1, `hsl(${hue2}, 70%, 30%)`)
+    // Create SVG thumbnail
+    const svg = createSVGThumbnail(width, height, hue1, hue2)
     
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, 640, 360)
-    
-    // Add play button overlay
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'
-    ctx.fillRect(0, 0, 640, 360)
-    
-    // Draw play button
-    ctx.fillStyle = 'white'
-    ctx.beginPath()
-    ctx.moveTo(320 - 30, 180 - 25)
-    ctx.lineTo(320 - 30, 180 + 25)
-    ctx.lineTo(320 + 30, 180)
-    ctx.closePath()
-    ctx.fill()
-    
-    // Add video duration in corner (fake for now)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-    ctx.fillRect(580, 320, 50, 25)
-    
-    ctx.fillStyle = 'white'
-    ctx.font = '14px Arial'
-    ctx.textAlign = 'center'
-    ctx.fillText('0:30', 605, 337)
-    
-    // Convert to JPEG
-    const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 })
-    const arrayBuffer = await blob.arrayBuffer()
-    return new Uint8Array(arrayBuffer)
+    // Convert SVG to bytes
+    return new TextEncoder().encode(svg)
     
   } catch (error) {
     console.error('Error in generateThumbnailFromVideo:', error)
     // Fallback to simple colored rectangle
     return generateSimpleThumbnail(videoId)
   }
+}
+
+function createSVGThumbnail(width: number, height: number, hue1: number, hue2: number): string {
+  const rgb1 = hslToRgb(hue1 / 360, 0.7, 0.5)
+  const rgb2 = hslToRgb(hue2 / 360, 0.7, 0.3)
+  
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:rgb(${rgb1[0]},${rgb1[1]},${rgb1[2]});stop-opacity:1" />
+      <stop offset="100%" style="stop-color:rgb(${rgb2[0]},${rgb2[1]},${rgb2[2]});stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#grad1)" />
+  <rect width="100%" height="100%" fill="rgba(0,0,0,0.3)" />
+  <circle cx="${width/2}" cy="${height/2}" r="50" fill="rgba(0,0,0,0.7)" />
+  <polygon points="${width/2-20},${height/2-15} ${width/2-20},${height/2+15} ${width/2+25},${height/2}" fill="white" />
+  <rect x="${width-70}" y="${height-35}" width="60" height="25" rx="3" fill="rgba(0,0,0,0.8)" />
+  <text x="${width-40}" y="${height-18}" font-family="Arial" font-size="12" fill="white" text-anchor="middle">0:30</text>
+</svg>`
+  
+  return svg
+}
+
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  let r, g, b
+  
+  if (s === 0) {
+    r = g = b = l // achromatic
+  } else {
+    const hue2rgb = (p: number, q: number, t: number) => {
+      if (t < 0) t += 1
+      if (t > 1) t -= 1
+      if (t < 1/6) return p + (q - p) * 6 * t
+      if (t < 1/2) return q
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
+      return p
+    }
+    
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s
+    const p = 2 * l - q
+    r = hue2rgb(p, q, h + 1/3)
+    g = hue2rgb(p, q, h)
+    b = hue2rgb(p, q, h - 1/3)
+  }
+  
+  return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)]
 }
 
 function generateSimpleThumbnail(videoId: string): Uint8Array {
