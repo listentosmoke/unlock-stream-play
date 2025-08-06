@@ -6,6 +6,8 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Play, Lock, Star, Eye } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { VideoThumbnail } from './VideoThumbnail';
 
 interface VideoCardProps {
   video: {
@@ -31,6 +33,7 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
   const [loading, setLoading] = useState(false);
   const { user, userProfile, refreshProfile } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleUnlock = async () => {
     if (!user || !userProfile) {
@@ -110,15 +113,29 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick();
+    } else {
+      navigate(`/video/${video.id}`);
+    }
+  };
+
   return (
     <Card 
       className="group overflow-hidden border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-lg hover:shadow-primary/10 cursor-pointer" 
-      onClick={onClick}
+      onClick={handleCardClick}
     >
       <div className="relative aspect-video bg-video-bg overflow-hidden">
         {video.thumbnail_url ? (
           <img 
             src={video.thumbnail_url} 
+            alt={video.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : video.full_video_url ? (
+          <VideoThumbnail 
+            videoUrl={video.full_video_url}
             alt={video.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
