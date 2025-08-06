@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Users, Video, Coins, Gift, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { GiftCardModeration } from '@/components/admin/GiftCardModeration';
 
@@ -80,53 +80,64 @@ export default function Admin() {
     }
   };
 
-  const handleVideoAction = async (videoId: string, action: 'approved' | 'rejected') => {
+  const handleVideoAction = async (videoId: string, action: 'approved' | 'rejected' | 'delete') => {
     try {
       const video = pendingVideos.find(v => v.id === videoId);
       if (!video) return;
 
-      // Update video status
-      const { error: updateError } = await supabase
-        .from('videos')
-        .update({ status: action })
-        .eq('id', videoId);
+      if (action === 'delete') {
+        // Delete the video
+        const { error: deleteError } = await supabase
+          .from('videos')
+          .delete()
+          .eq('id', videoId);
 
-      if (updateError) throw updateError;
+        if (deleteError) throw deleteError;
+      } else {
+        // Update video status
+        const { error: updateError } = await supabase
+          .from('videos')
+          .update({ status: action })
+          .eq('id', videoId);
 
-      // If approved, reward the uploader
-      if (action === 'approved') {
-        const { error: rewardError } = await supabase
-          .from('transactions')
-          .insert({
-            user_id: video.uploader_id,
-            amount: video.reward_points,
-            type: 'reward',
-            description: `Video approved: ${video.title}`,
-            video_id: videoId
-          });
+        if (updateError) throw updateError;
 
-        if (rewardError) throw rewardError;
+        // If approved, reward the uploader
+        if (action === 'approved') {
+          const { error: rewardError } = await supabase
+            .from('transactions')
+            .insert({
+              user_id: video.uploader_id,
+              amount: video.reward_points,
+              type: 'reward',
+              description: `Video approved: ${video.title}`,
+              video_id: videoId
+            });
 
-        // Update uploader's points
-        const { data: profileData, error: profileFetchError } = await supabase
-          .from('profiles')
-          .select('points')
-          .eq('user_id', video.uploader_id)
-          .single();
+          if (rewardError) throw rewardError;
 
-        if (profileFetchError) throw profileFetchError;
+          // Update uploader's points
+          const { data: profileData, error: profileFetchError } = await supabase
+            .from('profiles')
+            .select('points')
+            .eq('user_id', video.uploader_id)
+            .maybeSingle();
 
-        const { error: profileUpdateError } = await supabase
-          .from('profiles')
-          .update({ points: (profileData.points || 0) + video.reward_points })
-          .eq('user_id', video.uploader_id);
+          if (profileFetchError) throw profileFetchError;
 
-        if (profileUpdateError) throw profileUpdateError;
+          const currentPoints = profileData?.points || 0;
+          const { error: profileUpdateError } = await supabase
+            .from('profiles')
+            .update({ points: currentPoints + video.reward_points })
+            .eq('user_id', video.uploader_id);
+
+          if (profileUpdateError) throw profileUpdateError;
+        }
       }
 
       toast({
         title: "Success",
-        description: `Video ${action} successfully`,
+        description: action === 'delete' ? "Video deleted successfully" : `Video ${action} successfully`,
       });
 
       fetchPendingVideos();
@@ -260,6 +271,14 @@ export default function Admin() {
                         >
                           <XCircle className="h-4 w-4 mr-2" />
                           Reject
+                        </Button>
+                        <Button
+                          onClick={() => handleVideoAction(video.id, 'delete')}
+                          variant="outline"
+                          className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
                         </Button>
                       </div>
                     </CardContent>
