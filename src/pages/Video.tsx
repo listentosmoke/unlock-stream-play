@@ -224,22 +224,16 @@ const Video = () => {
                       src={video.thumbnail_url} 
                       alt={video.title}
                       className="w-full h-full object-cover"
+                      onLoad={() => console.log('Main video thumbnail loaded:', video.thumbnail_url)}
                       onError={(e) => {
                         console.log('Main video thumbnail failed to load:', video.thumbnail_url);
                         e.currentTarget.style.display = 'none';
                       }}
                     />
-                  ) : video.full_video_url ? (
-                    <VideoThumbnail 
-                      videoUrl={video.full_video_url}
-                      alt={video.title}
-                      className="w-full h-full object-cover"
-                    />
                   ) : (
-                    <VideoPlaceholder 
-                      title={video.title}
-                      className="w-full h-full"
-                    />
+                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                      <Play className="h-16 w-16 text-primary/50" />
+                    </div>
                   )}
                   
                   <div className="absolute inset-0 bg-video-overlay backdrop-blur-sm flex items-center justify-center">
@@ -305,22 +299,16 @@ const Video = () => {
                       src={recommendedVideo.thumbnail_url} 
                       alt={recommendedVideo.title}
                       className="w-full h-full object-cover hover:scale-105 transition-transform"
+                      onLoad={() => console.log('Recommended thumbnail loaded:', recommendedVideo.thumbnail_url)}
                       onError={(e) => {
-                        console.log('Recommended video thumbnail failed to load:', recommendedVideo.thumbnail_url);
+                        console.log('Recommended thumbnail failed to load:', recommendedVideo.thumbnail_url);
                         e.currentTarget.style.display = 'none';
                       }}
                     />
-                  ) : recommendedVideo.full_video_url ? (
-                    <VideoThumbnail 
-                      videoUrl={recommendedVideo.full_video_url}
-                      alt={recommendedVideo.title}
-                      className="w-full h-full object-cover hover:scale-105 transition-transform"
-                    />
                   ) : (
-                    <VideoPlaceholder 
-                      title={recommendedVideo.title}
-                      className="w-full h-full"
-                    />
+                    <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                      <Play className="h-6 w-6 text-primary/50" />
+                    </div>
                   )}
                     
                     {!userUnlocks.includes(recommendedVideo.id) && (

@@ -128,43 +128,22 @@ export function VideoCard({ video, isUnlocked = false, onUnlock, onClick }: Vide
       onClick={handleCardClick}
     >
       <div className="relative aspect-video bg-video-bg overflow-hidden">
-        {(() => {
-          console.log('VideoCard thumbnail logic:', { 
-            hasThumbnailUrl: !!video.thumbnail_url, 
-            hasFullVideoUrl: !!video.full_video_url,
-            thumbnailUrl: video.thumbnail_url,
-            videoTitle: video.title
-          });
-          
-          if (video.thumbnail_url) {
-            return (
-              <img 
-                src={video.thumbnail_url} 
-                alt={video.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                onError={(e) => {
-                  console.log('Thumbnail image failed to load:', video.thumbnail_url);
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            );
-          } else if (video.full_video_url) {
-            return (
-              <VideoThumbnail 
-                videoUrl={video.full_video_url}
-                alt={video.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            );
-          } else {
-            return (
-              <VideoPlaceholder 
-                title={video.title}
-                className="w-full h-full"
-              />
-            );
-          }
-        })()}
+        {video.thumbnail_url ? (
+          <img 
+            src={video.thumbnail_url} 
+            alt={video.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onLoad={() => console.log('Thumbnail loaded successfully:', video.thumbnail_url)}
+            onError={(e) => {
+              console.log('Thumbnail failed to load:', video.thumbnail_url);
+              e.currentTarget.style.display = 'none';
+            }}
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+            <Play className="h-16 w-16 text-primary/50" />
+          </div>
+        )}
         
         {/* Duration badge */}
         {video.duration && (

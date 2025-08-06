@@ -26,7 +26,7 @@ messages_path = "./supabase/logs"
 enabled = true
 port = 54324
 file_size_limit = "50MiB"
-allowed_mime_types = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml", "video/mp4", "video/webm", "video/ogg"]
+allowed_mime_types = ["image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "video/mp4", "video/webm", "video/ogg"]
 
 [auth]
 enabled = true
