@@ -14,11 +14,11 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    const { inviteCode, inviteeId } = await req.json();
+    const { inviteCode } = await req.json();
 
-    console.log('Processing invite redemption:', { inviteCode, inviteeId });
+    console.log('Processing invite redemption for code:', inviteCode);
 
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
@@ -31,20 +31,18 @@ serve(async (req) => {
       );
     }
 
-    // Create client with proper authentication
-    const supabase = createClient(supabaseUrl, supabaseKey, {
+    // Extract JWT token from authorization header
+    const jwt = authHeader.replace('Bearer ', '');
+    
+    // Create service role client for secure operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
         persistSession: false,
       },
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
     });
 
-    // Verify the user is authenticated by getting their session
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    // Verify the JWT token and get user info
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
     
     if (authError || !user) {
       console.error('Authentication failed:', authError);
@@ -55,6 +53,18 @@ serve(async (req) => {
     }
 
     console.log('User authenticated:', user.id);
+
+    // Create client with user context for RPC call
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        persistSession: false,
+      },
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
+    });
 
     // Use the secure database function to handle redemption atomically
     const { data, error } = await supabase.rpc('redeem_invite', {
