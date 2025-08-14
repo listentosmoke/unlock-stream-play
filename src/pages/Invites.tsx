@@ -70,26 +70,41 @@ export default function Invites() {
 
   const createInviteForUser = async () => {
     try {
+      // Verify user is authenticated and get current auth user
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !authUser) {
+        throw new Error('User not authenticated');
+      }
+
+      console.log('Creating invite for user:', authUser.id);
+
       // First generate a unique invite code
       const { data: inviteCode, error: codeError } = await supabase
         .rpc('generate_invite_code');
 
       if (codeError) throw codeError;
 
+      console.log('Generated invite code:', inviteCode);
+
       // Create a new permanent invite for the user
       const { data, error } = await supabase
         .from('invites')
         .insert({
           invite_code: inviteCode,
-          inviter_id: user!.id,
+          inviter_id: authUser.id, // Use auth user ID to match RLS policy
           max_uses: 999999, // Effectively unlimited
           is_active: true
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Insert error:', error);
+        throw error;
+      }
       
+      console.log('Created invite:', data);
       setUserInvite(data);
       toast({
         title: "Success",
@@ -99,7 +114,7 @@ export default function Invites() {
       console.error('Error creating invite:', error);
       toast({
         title: "Error", 
-        description: "Failed to create your invite link",
+        description: `Failed to create your invite link: ${error.message || 'Unknown error'}`,
         variant: "destructive"
       });
     }
