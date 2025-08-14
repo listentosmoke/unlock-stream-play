@@ -356,6 +356,10 @@ export type Database = {
         Args: { user_id_param: string }
         Returns: boolean
       }
+      redeem_invite: {
+        Args: { invite_code_param: string }
+        Returns: Json
+      }
     }
     Enums: {
       gift_card_type:

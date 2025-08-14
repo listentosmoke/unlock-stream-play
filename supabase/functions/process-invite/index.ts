@@ -14,191 +14,56 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    
-    // Create admin client for privileged operations
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const { inviteCode, inviteeId } = await req.json();
 
     console.log('Processing invite redemption:', { inviteCode, inviteeId });
 
-    // Get the invite and validate it
-    const { data: invite, error: inviteError } = await supabaseAdmin
-      .from('invites')
-      .select('*')
-      .eq('invite_code', inviteCode)
-      .eq('is_active', true)
-      .single();
+    // Create client with user context for the redemption
+    const authHeader = req.headers.get('authorization');
+    const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+      auth: {
+        persistSession: false,
+      },
+      global: {
+        headers: {
+          Authorization: authHeader!,
+        },
+      },
+    });
 
-    if (inviteError || !invite) {
-      console.error('Invite not found or invalid:', inviteError);
+    // Use the secure database function to handle redemption atomically
+    const { data, error } = await supabase.rpc('redeem_invite', {
+      invite_code_param: inviteCode
+    });
+
+    if (error) {
+      console.error('Database function error:', error);
       return new Response(
-        JSON.stringify({ error: 'Invalid or expired invite code' }),
+        JSON.stringify({ error: 'Failed to process invite redemption' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!data.success) {
+      console.error('Redemption failed:', data.error);
+      return new Response(
+        JSON.stringify({ error: data.error }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Check if invite is expired
-    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-      console.error('Invite expired:', invite.expires_at);
-      return new Response(
-        JSON.stringify({ error: 'Invite code has expired' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check if invite has reached max uses
-    if (invite.current_uses >= invite.max_uses) {
-      console.error('Invite max uses reached:', invite.current_uses, invite.max_uses);
-      return new Response(
-        JSON.stringify({ error: 'Invite code has reached maximum uses' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Check if user already redeemed this invite
-    const { data: existingRedemption } = await supabaseAdmin
-      .from('invite_redemptions')
-      .select('id')
-      .eq('invite_id', invite.id)
-      .eq('invitee_id', inviteeId)
-      .single();
-
-    if (existingRedemption) {
-      console.error('User already redeemed this invite');
-      return new Response(
-        JSON.stringify({ error: 'You have already used this invite code' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Prevent self-invitation
-    if (invite.inviter_id === inviteeId) {
-      console.error('Self-invitation attempt');
-      return new Response(
-        JSON.stringify({ error: 'You cannot use your own invite code' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const inviterPoints = 50;
-    const inviteePoints = 25;
-
-    // Get current user profiles to update points
-    const [inviterProfile, inviteeProfile] = await Promise.all([
-      supabaseAdmin
-        .from('profiles')
-        .select('points')
-        .eq('user_id', invite.inviter_id)
-        .single(),
-      supabaseAdmin
-        .from('profiles')
-        .select('points')
-        .eq('user_id', inviteeId)
-        .single()
-    ]);
-
-    if (inviterProfile.error || inviteeProfile.error) {
-      console.error('Error fetching profiles:', inviterProfile.error, inviteeProfile.error);
-      return new Response(
-        JSON.stringify({ error: 'User profiles not found' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    try {
-      // Update inviter points
-      const { error: inviterUpdateError } = await supabaseAdmin
-        .from('profiles')
-        .update({ points: inviterProfile.data.points + inviterPoints })
-        .eq('user_id', invite.inviter_id);
-
-      if (inviterUpdateError) {
-        throw new Error(`Failed to update inviter points: ${inviterUpdateError.message}`);
-      }
-
-      // Update invitee points
-      const { error: inviteeUpdateError } = await supabaseAdmin
-        .from('profiles')
-        .update({ points: inviteeProfile.data.points + inviteePoints })
-        .eq('user_id', inviteeId);
-
-      if (inviteeUpdateError) {
-        throw new Error(`Failed to update invitee points: ${inviteeUpdateError.message}`);
-      }
-
-      // Create inviter transaction
-      const { error: inviterTransactionError } = await supabaseAdmin
-        .from('transactions')
-        .insert({
-          user_id: invite.inviter_id,
-          type: 'referral',
-          amount: inviterPoints,
-          description: `Referral bonus for inviting new user`
-        });
-
-      if (inviterTransactionError) {
-        throw new Error(`Failed to create inviter transaction: ${inviterTransactionError.message}`);
-      }
-
-      // Create invitee transaction
-      const { error: inviteeTransactionError } = await supabaseAdmin
-        .from('transactions')
-        .insert({
-          user_id: inviteeId,
-          type: 'referral',
-          amount: inviteePoints,
-          description: `Welcome bonus for joining via invite`
-        });
-
-      if (inviteeTransactionError) {
-        throw new Error(`Failed to create invitee transaction: ${inviteeTransactionError.message}`);
-      }
-
-      // Create redemption record
-      const { error: redemptionError } = await supabaseAdmin
-        .from('invite_redemptions')
-        .insert({
-          invite_id: invite.id,
-          inviter_id: invite.inviter_id,
-          invitee_id: inviteeId,
-          inviter_points_awarded: inviterPoints,
-          invitee_points_awarded: inviteePoints
-        });
-
-      if (redemptionError) {
-        throw new Error(`Failed to create redemption record: ${redemptionError.message}`);
-      }
-
-      // Update invite usage count
-      const { error: inviteUpdateError } = await supabaseAdmin
-        .from('invites')
-        .update({ 
-          current_uses: invite.current_uses + 1,
-          is_active: invite.current_uses + 1 >= invite.max_uses ? false : true
-        })
-        .eq('id', invite.id);
-
-      if (inviteUpdateError) {
-        throw new Error(`Failed to update invite usage: ${inviteUpdateError.message}`);
-      }
-
-      console.log('Invite redemption successful');
-      
-      return new Response(
-        JSON.stringify({
-          success: true,
-          inviterPointsAwarded: inviterPoints,
-          inviteePointsAwarded: inviteePoints
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-
-    } catch (error) {
-      console.error('Transaction error:', error);
-      throw error;
-    }
+    console.log('Invite redemption successful:', data);
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        inviterPointsAwarded: data.inviter_points_awarded,
+        inviteePointsAwarded: data.invitee_points_awarded,
+        message: data.message
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
     console.error('Error processing invite:', error);
