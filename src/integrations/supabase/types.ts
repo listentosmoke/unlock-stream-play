@@ -337,6 +337,10 @@ export type Database = {
           username: string
         }[]
       }
+      is_admin: {
+        Args: { user_id_param: string }
+        Returns: boolean
+      }
     }
     Enums: {
       gift_card_type:
