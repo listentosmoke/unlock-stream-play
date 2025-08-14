@@ -51,13 +51,55 @@ export default function Invites() {
 
       if (error) throw error;
       
-      // Take the first invite (users typically have one permanent invite)
-      setUserInvite(data && data.length > 0 ? data[0] : null);
+      // Check if user has an existing invite
+      if (data && data.length > 0) {
+        setUserInvite(data[0]);
+      } else {
+        // User doesn't have an invite yet, create one for them
+        await createInviteForUser();
+      }
     } catch (error) {
       console.error('Error fetching user invite:', error);
       toast({
         title: "Error",
         description: "Failed to load your invite link",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const createInviteForUser = async () => {
+    try {
+      // First generate a unique invite code
+      const { data: inviteCode, error: codeError } = await supabase
+        .rpc('generate_invite_code');
+
+      if (codeError) throw codeError;
+
+      // Create a new permanent invite for the user
+      const { data, error } = await supabase
+        .from('invites')
+        .insert({
+          invite_code: inviteCode,
+          inviter_id: user!.id,
+          max_uses: 999999, // Effectively unlimited
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setUserInvite(data);
+      toast({
+        title: "Success",
+        description: "Your invite link has been created!",
+      });
+    } catch (error) {
+      console.error('Error creating invite:', error);
+      toast({
+        title: "Error", 
+        description: "Failed to create your invite link",
         variant: "destructive"
       });
     }
