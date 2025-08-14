@@ -203,7 +203,6 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
-          stripe_session_id: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
           video_id: string | null
@@ -213,7 +212,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
-          stripe_session_id?: string | null
           type: Database["public"]["Enums"]["transaction_type"]
           user_id: string
           video_id?: string | null
@@ -223,7 +221,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
-          stripe_session_id?: string | null
           type?: Database["public"]["Enums"]["transaction_type"]
           user_id?: string
           video_id?: string | null
