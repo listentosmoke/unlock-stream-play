@@ -44,23 +44,15 @@ export default function Invites() {
 
   const fetchUserInvite = async () => {
     try {
-      // Get the user's unique permanent invite
+      // Get the user's unique permanent invite using the security definer function
+      // This function excludes the invited_email column for privacy
       const { data, error } = await supabase
-        .from('invites')
-        .select(`
-          id,
-          invite_code,
-          max_uses,
-          current_uses,
-          expires_at,
-          created_at,
-          is_active
-        `)
-        .eq('inviter_id', user!.id)
-        .single();
+        .rpc('get_user_invites');
 
-      if (error && error.code !== 'PGRST116') throw error;
-      setUserInvite(data || null);
+      if (error) throw error;
+      
+      // Take the first invite (users typically have one permanent invite)
+      setUserInvite(data && data.length > 0 ? data[0] : null);
     } catch (error) {
       console.error('Error fetching user invite:', error);
       toast({

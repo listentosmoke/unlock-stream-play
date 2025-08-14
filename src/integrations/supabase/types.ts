@@ -334,6 +334,20 @@ export type Database = {
           username: string
         }[]
       }
+      get_user_invites: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          current_uses: number
+          expires_at: string
+          id: string
+          invite_code: string
+          inviter_id: string
+          is_active: boolean
+          max_uses: number
+          updated_at: string
+        }[]
+      }
       is_admin: {
         Args: { user_id_param: string }
         Returns: boolean
