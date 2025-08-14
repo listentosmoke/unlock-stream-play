@@ -23,16 +23,17 @@ serve(async (req) => {
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
     
-    if (!authHeader) {
-      console.error('No authorization header provided');
+    console.log('Auth header present:', !!authHeader);
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('No valid authorization header provided');
       return new Response(
         JSON.stringify({ error: 'Authentication required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Create client with user's auth token (NOT service role)
-    // This ensures auth.uid() works correctly in RPC functions
+    // Create client with user's auth token
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
@@ -44,18 +45,25 @@ serve(async (req) => {
       },
     });
 
+    console.log('Testing user authentication...');
+    
     // Verify the user is authenticated by getting their session
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
+    console.log('Auth check result - user:', !!user, 'error:', authError?.message);
+    
     if (authError || !user) {
-      console.error('Authentication failed:', authError);
+      console.error('Authentication failed:', authError?.message || 'No user found');
       return new Response(
-        JSON.stringify({ error: 'Invalid authentication' }),
+        JSON.stringify({ 
+          error: 'Invalid authentication',
+          details: authError?.message || 'No user found'
+        }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('User authenticated:', user.id);
+    console.log('User authenticated successfully:', user.id);
 
     // Use the secure database function to handle redemption atomically
     console.log('Calling redeem_invite function with code:', inviteCode);
