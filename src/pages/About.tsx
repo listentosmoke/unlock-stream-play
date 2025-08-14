@@ -14,10 +14,10 @@ export default function About() {
         {/* Hero Section */}
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-            About StreamPlay
+            About LockedContent
           </h1>
           <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto">
-            StreamPlay is a premium video platform where creativity meets rewards. Discover exclusive content, 
+            LockedContent is a premium video platform where creativity meets rewards. Discover exclusive content, 
             unlock premium videos with points, and earn rewards by sharing your own creative work.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">

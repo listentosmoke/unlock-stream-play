@@ -63,7 +63,7 @@ export default function Privacy() {
                   <strong>IMPORTANT:</strong> Our platform allows users to upload and share content. Please be aware that:
                 </p>
                 <ul className="list-disc pl-6 space-y-2">
-                  <li>User-generated content is not controlled or monitored by StreamPlay in real-time</li>
+                  <li>User-generated content is not controlled or monitored by LockedContent in real-time</li>
                   <li>We are not responsible for the privacy practices of other users</li>
                   <li>Content you upload may be viewed by other users according to your privacy settings</li>
                   <li>We cannot guarantee the privacy or security of information shared in user-generated content</li>

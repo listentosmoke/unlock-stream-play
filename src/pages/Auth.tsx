@@ -169,7 +169,7 @@ export default function Auth() {
       toast({
         title: "Success!",
         description: inviteCode 
-          ? `Welcome to StreamPlay! ${inviterName ? `Thanks to ${inviterName}, you` : 'You'} earned 25 bonus points!`
+          ? `Welcome to LockedContent! ${inviterName ? `Thanks to ${inviterName}, you` : 'You'} earned 25 bonus points!`
           : "Account created! You're now signed in.",
       });
       setCaptchaValid(false);
@@ -209,7 +209,7 @@ export default function Auth() {
           <div className="flex items-center justify-center mb-4">
             <Video className="h-12 w-12 text-primary mr-2" />
             <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              StreamPlay
+              LockedContent
             </h1>
           </div>
           <p className="text-muted-foreground">
@@ -223,7 +223,7 @@ export default function Auth() {
         <Card className="border-border/50 backdrop-blur-sm bg-card/80">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl text-center">
-              {inviteCode ? `Welcome to StreamPlay!` : 'Welcome'}
+              {inviteCode ? `Welcome to LockedContent!` : 'Welcome'}
             </CardTitle>
             <CardDescription className="text-center">
               {inviteCode 
