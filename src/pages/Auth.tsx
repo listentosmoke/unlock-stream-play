@@ -61,7 +61,7 @@ export default function Auth() {
     }
   };
 
-  const processInviteRedemption = async (userId: string) => {
+  const processInviteRedemption = async (userId: string, retryCount = 0) => {
     if (!inviteCode) return;
 
     try {
@@ -94,10 +94,20 @@ export default function Auth() {
           description: `You earned ${data.inviteePointsAwarded} bonus points! ${inviterName} earned ${data.inviterPointsAwarded} points for inviting you.`,
         });
       } else {
-        // Clear invalid invite cookie
+        // Handle specific error cases
+        if (data.error?.includes("User profile not found") && retryCount < 3) {
+          // Retry after a delay if profile not found
+          console.log(`Profile not found, retrying in ${(retryCount + 1) * 1000}ms...`);
+          setTimeout(() => {
+            processInviteRedemption(userId, retryCount + 1);
+          }, (retryCount + 1) * 1000);
+          return;
+        }
+        
+        // Clear invalid invite cookie for other errors
         clearInviteCookie();
         toast({
-          title: "Invite expired",
+          title: "Invite processing failed",
           description: data.error || "This invite code is no longer valid.",
           variant: "destructive"
         });
