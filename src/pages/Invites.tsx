@@ -26,7 +26,7 @@ interface InviteStats {
 }
 
 export default function Invites() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -35,12 +35,15 @@ export default function Invites() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      Promise.all([fetchUserInvite(), fetchStats()]);
-    } else {
-      navigate('/auth');
+    if (!authLoading) {
+      if (user) {
+        Promise.all([fetchUserInvite(), fetchStats()]);
+      } else {
+        // User is not authenticated, redirect to auth page
+        navigate('/auth');
+      }
     }
-  }, [user, navigate]);
+  }, [user, authLoading, navigate]);
 
   const fetchUserInvite = async () => {
     try {
