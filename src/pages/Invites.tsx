@@ -2,21 +2,17 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/components/auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/layout/Header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Copy, Share2, Gift, Users, Calendar, Eye, Plus } from "lucide-react";
+import { Copy, Share2, Users } from "lucide-react";
 import { format } from "date-fns";
 
 interface Invite {
   id: string;
   invite_code: string;
-  // invited_email removed for security - not exposed to regular users
   max_uses: number;
   current_uses: number;
   expires_at?: string;
@@ -25,45 +21,30 @@ interface Invite {
 }
 
 interface InviteStats {
-  totalInvites: number;
-  successfulReferrals: number;
-  pointsEarned: number;
-  activeInvites: number;
+  totalRedemptions: number;
+  totalPointsEarned: number;
 }
 
 export default function Invites() {
-  const { user, userProfile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
-  const [invites, setInvites] = useState<Invite[]>([]);
-  const [stats, setStats] = useState<InviteStats>({
-    totalInvites: 0,
-    successfulReferrals: 0,
-    pointsEarned: 0,
-    activeInvites: 0
-  });
+  const [userInvite, setUserInvite] = useState<Invite | null>(null);
+  const [stats, setStats] = useState<InviteStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  
-  // Form state
-  const [maxUses, setMaxUses] = useState(1);
-  const [expiresIn, setExpiresIn] = useState<number | null>(null);
-  const [invitedEmail, setInvitedEmail] = useState("");
 
   useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-      return;
+    if (user) {
+      Promise.all([fetchUserInvite(), fetchStats()]);
+    } else {
+      navigate('/auth');
     }
-    fetchInvites();
-    fetchStats();
   }, [user, navigate]);
 
-  const fetchInvites = async () => {
+  const fetchUserInvite = async () => {
     try {
-      // Only select safe fields - exclude invited_email for security
+      // Get the user's unique permanent invite
       const { data, error } = await supabase
         .from('invites')
         .select(`
@@ -76,15 +57,15 @@ export default function Invites() {
           is_active
         `)
         .eq('inviter_id', user!.id)
-        .order('created_at', { ascending: false });
+        .single();
 
-      if (error) throw error;
-      setInvites(data || []);
+      if (error && error.code !== 'PGRST116') throw error;
+      setUserInvite(data || null);
     } catch (error) {
-      console.error('Error fetching invites:', error);
+      console.error('Error fetching user invite:', error);
       toast({
         title: "Error",
-        description: "Failed to load invites",
+        description: "Failed to load your invite link",
         variant: "destructive"
       });
     }
@@ -100,18 +81,9 @@ export default function Invites() {
 
       if (redemptionsError) throw redemptionsError;
 
-      const { data: inviteData, error: inviteError } = await supabase
-        .from('invites')
-        .select('id, is_active')
-        .eq('inviter_id', user!.id);
-
-      if (inviteError) throw inviteError;
-
       setStats({
-        totalInvites: inviteData?.length || 0,
-        successfulReferrals: redemptions?.length || 0,
-        pointsEarned: redemptions?.reduce((sum, r) => sum + r.inviter_points_awarded, 0) || 0,
-        activeInvites: inviteData?.filter(i => i.is_active).length || 0
+        totalRedemptions: redemptions?.length || 0,
+        totalPointsEarned: redemptions?.reduce((sum, r) => sum + r.inviter_points_awarded, 0) || 0
       });
     } catch (error) {
       console.error('Error fetching stats:', error);
@@ -120,97 +92,62 @@ export default function Invites() {
     }
   };
 
-  const createInvite = async () => {
-    if (!user) return;
+  const copyInviteLink = async () => {
+    if (!userInvite) return;
     
-    setCreating(true);
+    const inviteUrl = `${window.location.origin}?invite=${userInvite.invite_code}`;
+    
     try {
-      // Generate unique invite code
-      const { data: codeData, error: codeError } = await supabase
-        .rpc('generate_invite_code');
-
-      if (codeError) throw codeError;
-
-      const expiresAt = expiresIn ? 
-        new Date(Date.now() + expiresIn * 24 * 60 * 60 * 1000).toISOString() : 
-        null;
-
-      const { error } = await supabase
-        .from('invites')
-        .insert({
-          inviter_id: user.id,
-          invite_code: codeData,
-          invited_email: invitedEmail || null,
-          max_uses: maxUses,
-          expires_at: expiresAt
-        });
-
-      if (error) throw error;
-
+      await navigator.clipboard.writeText(inviteUrl);
       toast({
         title: "Success",
-        description: "Invite created successfully!"
+        description: "Invite link copied to clipboard!"
       });
-
-      // Reset form
-      setMaxUses(1);
-      setExpiresIn(null);
-      setInvitedEmail("");
-      setShowCreateForm(false);
-
-      // Refresh data
-      fetchInvites();
-      fetchStats();
     } catch (error) {
-      console.error('Error creating invite:', error);
+      console.error('Error copying to clipboard:', error);
       toast({
         title: "Error",
-        description: "Failed to create invite",
+        description: "Failed to copy invite link",
         variant: "destructive"
       });
-    } finally {
-      setCreating(false);
     }
   };
 
-  const copyInviteLink = (inviteCode: string) => {
-    const inviteUrl = `${window.location.origin}/auth?invite=${inviteCode}`;
-    navigator.clipboard.writeText(inviteUrl);
-    toast({
-      title: "Copied!",
-      description: "Invite link copied to clipboard"
-    });
-  };
-
-  const shareInvite = (inviteCode: string) => {
-    const inviteUrl = `${window.location.origin}/auth?invite=${inviteCode}`;
-    const text = `Join StreamPlay and get 25 bonus points! Use my invite link: ${inviteUrl}`;
+  const shareInvite = async () => {
+    if (!userInvite) return;
     
+    const inviteUrl = `${window.location.origin}?invite=${userInvite.invite_code}`;
+    const shareText = `Join me on this awesome platform! Use my invite link: ${inviteUrl}`;
+
     if (navigator.share) {
-      navigator.share({
-        title: 'Join StreamPlay',
-        text: text,
-        url: inviteUrl
-      });
+      try {
+        await navigator.share({
+          title: 'Join me!',
+          text: shareText,
+          url: inviteUrl
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Error sharing:', error);
+          // Fallback to clipboard
+          copyInviteLink();
+        }
+      }
     } else {
-      // Fallback to copy
-      navigator.clipboard.writeText(text);
-      toast({
-        title: "Copied!",
-        description: "Invite message copied to clipboard"
-      });
+      // Fallback to clipboard copy
+      copyInviteLink();
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
         <Header />
         <div className="container mx-auto px-4 py-8">
           <div className="animate-pulse space-y-4">
             <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {[...Array(4)].map((_, i) => (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {[...Array(3)].map((_, i) => (
                 <div key={i} className="h-24 bg-muted rounded"></div>
               ))}
             </div>
@@ -221,199 +158,112 @@ export default function Invites() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5">
       <Header />
-      <div className="container mx-auto px-4 py-8 space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-bold gradient-text">Invite Friends</h1>
-            <p className="text-muted-foreground mt-2">
-              Share StreamPlay with friends and earn points when they join!
+      <main className="container mx-auto px-4 py-8">
+        <div className="max-w-4xl mx-auto space-y-8">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+              Your Invite Link
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              Share your unique invite link and earn points for each successful referral
             </p>
           </div>
-          <Button 
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="w-full md:w-auto"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Invite
-          </Button>
-        </div>
 
-        {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Invites</CardTitle>
-              <Gift className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalInvites}</div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Successful Referrals</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.successfulReferrals}</div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Points Earned</CardTitle>
-              <Gift className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">{stats.pointsEarned}</div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Invites</CardTitle>
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{stats.activeInvites}</div>
-            </CardContent>
-          </Card>
-        </div>
+          {/* Statistics Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                  {userInvite?.current_uses || 0}
+                </div>
+                <div className="text-sm text-blue-600/70 dark:text-blue-400/70 font-medium">
+                  People Invited
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Create Invite Form */}
-        {showCreateForm && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Create New Invite</CardTitle>
-              <CardDescription>
-                Customize your invite settings and share with friends
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="maxUses">Maximum Uses</Label>
-                  <Input
-                    id="maxUses"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={maxUses}
-                    onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
-                  />
+            <Card className="bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/20 dark:to-green-900/10 border-green-200 dark:border-green-800">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-green-600 dark:text-green-400">
+                  {stats?.totalRedemptions || 0}
+                </div>
+                <div className="text-sm text-green-600/70 dark:text-green-400/70 font-medium">
+                  Successful Referrals
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-950/20 dark:to-purple-900/10 border-purple-200 dark:border-purple-800">
+              <CardContent className="p-6 text-center">
+                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                  {stats?.totalPointsEarned || 0}
+                </div>
+                <div className="text-sm text-purple-600/70 dark:text-purple-400/70 font-medium">
+                  Points Earned
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Your Unique Invite Link */}
+          {userInvite ? (
+            <Card className="border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10">
+              <CardContent className="p-8 text-center space-y-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+                  <Users className="w-8 h-8 text-primary" />
                 </div>
                 
-                <div>
-                  <Label htmlFor="expiresIn">Expires In (Days)</Label>
-                  <Input
-                    id="expiresIn"
-                    type="number"
-                    min="1"
-                    max="365"
-                    placeholder="Never expires"
-                    value={expiresIn || ""}
-                    onChange={(e) => setExpiresIn(parseInt(e.target.value) || null)}
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="invitedEmail">Invited Email (Optional)</Label>
-                <Input
-                  id="invitedEmail"
-                  type="email"
-                  placeholder="friend@example.com"
-                  value={invitedEmail}
-                  onChange={(e) => setInvitedEmail(e.target.value)}
-                />
-              </div>
-              
-              <div className="flex gap-2">
-                <Button onClick={createInvite} disabled={creating}>
-                  {creating ? "Creating..." : "Create Invite"}
-                </Button>
-                <Button variant="outline" onClick={() => setShowCreateForm(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Invites List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Your Invites</CardTitle>
-            <CardDescription>
-              Manage and share your invitation links
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {invites.length === 0 ? (
-              <div className="text-center py-8">
-                <Gift className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">No invites created yet</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-4"
-                  onClick={() => setShowCreateForm(true)}
-                >
-                  Create Your First Invite
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {invites.map((invite) => (
-                  <div key={invite.id} className="border rounded-lg p-4">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <code className="bg-muted px-2 py-1 rounded text-sm font-mono">
-                            {invite.invite_code}
-                          </code>
-                          <Badge variant={invite.is_active ? "default" : "secondary"}>
-                            {invite.is_active ? "Active" : "Inactive"}
-                          </Badge>
-                        </div>
-                        
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <p>Uses: {invite.current_uses}/{invite.max_uses}</p>
-                          <p>Created: {format(new Date(invite.created_at), 'MMM d, yyyy')}</p>
-                          {invite.expires_at && (
-                            <p>Expires: {format(new Date(invite.expires_at), 'MMM d, yyyy')}</p>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => copyInviteLink(invite.invite_code)}
-                        >
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy Link
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => shareInvite(invite.invite_code)}
-                        >
-                          <Share2 className="h-4 w-4 mr-2" />
-                          Share
-                        </Button>
-                      </div>
+                <div className="space-y-4">
+                  <h3 className="text-xl font-semibold">Your Unique Invite Link</h3>
+                  <p className="text-muted-foreground">
+                    Share this link with friends to earn referral points
+                  </p>
+                  
+                  <div className="max-w-2xl mx-auto">
+                    <div className="flex items-center gap-3 p-4 bg-muted/50 rounded-lg">
+                      <code className="flex-1 px-3 py-2 bg-background rounded font-mono text-sm break-all">
+                        {`${window.location.origin}?invite=${userInvite.invite_code}`}
+                      </code>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+
+                  <div className="flex gap-3 justify-center">
+                    <Button onClick={copyInviteLink}>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copy Link
+                    </Button>
+                    <Button variant="outline" onClick={shareInvite}>
+                      <Share2 className="w-4 h-4 mr-2" />
+                      Share
+                    </Button>
+                  </div>
+
+                  <div className="text-sm text-muted-foreground space-y-1 pt-4 border-t border-muted">
+                    <p>Invite Code: <code className="px-2 py-1 bg-muted rounded font-mono">{userInvite.invite_code}</code></p>
+                    <p>Total Uses: {userInvite.current_uses}</p>
+                    <p>Created: {format(new Date(userInvite.created_at), 'MMM d, yyyy')}</p>
+                    <p>Status: <Badge variant="default" className="ml-1">Active</Badge></p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                  <Users className="w-8 h-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">Loading your invite link...</h3>
+                <p className="text-muted-foreground">
+                  Please wait while we set up your unique invite link
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
