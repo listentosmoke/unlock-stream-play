@@ -157,33 +157,21 @@ export function UserManagement() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      // First, verify this isn't the current admin trying to delete themselves
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (currentUser?.id === userId) {
-        toast({
-          title: "Error",
-          description: "You cannot delete your own account",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Use the database function to safely delete all user data
+      const { error: cascadeError } = await supabase.rpc('delete_user_cascade', {
+        target_user_id: userId
+      });
 
-      // Delete the actual auth user (this will cascade delete the profile due to foreign key)
+      if (cascadeError) throw cascadeError;
+
+      // After successful cascade deletion, delete the auth user
       const { error: authError } = await supabase.auth.admin.deleteUser(userId);
       
       if (authError) {
-        // If auth deletion fails, try to delete just the profile
         console.warn('Auth user deletion failed:', authError);
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('user_id', userId);
-          
-        if (profileError) throw profileError;
-        
         toast({
-          title: "Partial Success",
-          description: "Profile removed but auth user may still exist. Contact system admin.",
+          title: "Partial Success", 
+          description: "User data deleted but auth user may still exist. Contact system admin.",
           variant: "destructive",
         });
       } else {
