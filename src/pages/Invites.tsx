@@ -75,46 +75,29 @@ export default function Invites() {
     try {
       console.log('Creating invite - Auth context user:', user);
       console.log('Creating invite - Auth context loading:', authLoading);
-      // Verify user is authenticated and get current auth user
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !authUser) {
-        throw new Error('User not authenticated');
-      }
 
-      console.log('Creating invite for user:', authUser.id);
-
-      // First generate a unique invite code
-      const { data: inviteCode, error: codeError } = await supabase
-        .rpc('generate_invite_code');
-
-      if (codeError) throw codeError;
-
-      console.log('Generated invite code:', inviteCode);
-
-      // Create a new permanent invite for the user
-      const { data, error } = await supabase
-        .from('invites')
-        .insert({
-          invite_code: inviteCode,
-          inviter_id: authUser.id, // Use auth user ID to match RLS policy
-          max_uses: 999999, // Effectively unlimited
-          is_active: true
-        })
-        .select()
-        .single();
+      // Use the secure database function to create/get user invite
+      const { data: result, error } = await supabase
+        .rpc('create_user_invite');
 
       if (error) {
-        console.error('Insert error:', error);
+        console.error('Function error:', error);
         throw error;
       }
-      
-      console.log('Created invite:', data);
-      setUserInvite(data);
-      toast({
-        title: "Success",
-        description: "Your invite link has been created!",
-      });
+
+      console.log('Function result:', result);
+
+      const response = result as unknown as { success: boolean; invite?: Invite; error?: string; message?: string };
+
+      if (response.success) {
+        setUserInvite(response.invite!);
+        toast({
+          title: "Success",
+          description: response.message || "Invite created successfully",
+        });
+      } else {
+        throw new Error(response.error || "Unknown error");
+      }
     } catch (error) {
       console.error('Error creating invite:', error);
       toast({

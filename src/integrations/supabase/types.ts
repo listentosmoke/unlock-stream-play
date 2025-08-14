@@ -323,6 +323,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_user_invite: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       delete_user_cascade: {
         Args: { target_user_id: string }
         Returns: undefined
