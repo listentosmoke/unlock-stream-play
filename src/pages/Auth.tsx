@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +20,7 @@ export default function Auth() {
   const [captchaValid, setCaptchaValid] = useState(false);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [inviterName, setInviterName] = useState<string | null>(null);
+  const [agreesToTerms, setAgreesToTerms] = useState(false);
   
   const { signUp, signIn, user } = useAuth();
   const navigate = useNavigate();
@@ -103,6 +106,15 @@ export default function Auth() {
       toast({
         title: "Error",
         description: "Please complete the security check",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!agreesToTerms) {
+      toast({
+        title: "Error",
+        description: "Please agree to the Terms of Service and Privacy Policy",
         variant: "destructive",
       });
       return;
@@ -310,10 +322,37 @@ export default function Auth() {
                   
                   <CaptchaChallenge onVerify={setCaptchaValid} className="mb-4" />
                   
+                  <div className="flex items-start space-x-2 mb-4">
+                    <Checkbox
+                      id="terms"
+                      checked={agreesToTerms}
+                      onCheckedChange={(checked) => setAgreesToTerms(checked as boolean)}
+                      className="mt-1"
+                    />
+                    <Label htmlFor="terms" className="text-sm leading-relaxed">
+                      I agree to the{' '}
+                      <Link 
+                        to="/terms" 
+                        target="_blank"
+                        className="text-primary hover:underline font-medium"
+                      >
+                        Terms of Service
+                      </Link>
+                      {' '}and{' '}
+                      <Link 
+                        to="/privacy"
+                        target="_blank" 
+                        className="text-primary hover:underline font-medium"
+                      >
+                        Privacy Policy
+                      </Link>
+                    </Label>
+                  </div>
+                  
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={loading || !captchaValid}
+                    disabled={loading || !captchaValid || !agreesToTerms}
                     variant="default"
                   >
                     {loading ? 'Creating account...' : 'Create Account'}
