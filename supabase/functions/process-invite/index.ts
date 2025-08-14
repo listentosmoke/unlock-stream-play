@@ -14,23 +14,47 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     const { inviteCode, inviteeId } = await req.json();
 
     console.log('Processing invite redemption:', { inviteCode, inviteeId });
 
-    // Create client with user context for the redemption
+    // Get the authorization header
     const authHeader = req.headers.get('authorization');
-    const supabase = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
+    
+    if (!authHeader) {
+      console.error('No authorization header provided');
+      return new Response(
+        JSON.stringify({ error: 'Authentication required' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create client with proper authentication
+    const supabase = createClient(supabaseUrl, supabaseKey, {
       auth: {
         persistSession: false,
       },
       global: {
         headers: {
-          Authorization: authHeader!,
+          Authorization: authHeader,
         },
       },
     });
+
+    // Verify the user is authenticated by getting their session
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !user) {
+      console.error('Authentication failed:', authError);
+      return new Response(
+        JSON.stringify({ error: 'Invalid authentication' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('User authenticated:', user.id);
 
     // Use the secure database function to handle redemption atomically
     const { data, error } = await supabase.rpc('redeem_invite', {
