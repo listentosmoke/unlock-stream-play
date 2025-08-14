@@ -66,6 +66,20 @@ export function Header() {
                     <Gift className="h-4 w-4" />
                   </Link>
                 </Button>
+                
+                <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
+                  <Link to="/invites">
+                    <User className="h-4 w-4 mr-2" />
+                    Invite Friends
+                  </Link>
+                </Button>
+
+                {/* Mobile invites button - icon only */}
+                <Button variant="outline" size="sm" className="sm:hidden p-2" asChild>
+                  <Link to="/invites">
+                    <User className="h-4 w-4" />
+                  </Link>
+                </Button>
               </div>
 
               {/* User menu */}
@@ -100,6 +114,12 @@ export function Header() {
                     <Link to="/profile">
                       <Settings className="mr-2 h-4 w-4" />
                       Settings
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link to="/invites">
+                      <Gift className="mr-2 h-4 w-4" />
+                      Invite Friends
                     </Link>
                   </DropdownMenuItem>
                   {userProfile?.role === 'admin' && (

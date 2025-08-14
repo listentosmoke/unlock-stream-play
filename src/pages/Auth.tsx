@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Lock, Mail, User, Video } from 'lucide-react';
 import { CaptchaChallenge } from '@/components/auth/CaptchaChallenge';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -15,9 +16,82 @@ export default function Auth() {
   const [username, setUsername] = useState('');
   const [loading, setLoading] = useState(false);
   const [captchaValid, setCaptchaValid] = useState(false);
-  const { signUp, signIn } = useAuth();
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [inviterName, setInviterName] = useState<string | null>(null);
+  
+  const { signUp, signIn, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (user) {
+      navigate("/");
+      return;
+    }
+    
+    // Check for invite code in URL
+    const invite = searchParams.get('invite');
+    if (invite) {
+      setInviteCode(invite);
+      fetchInviterInfo(invite);
+    }
+  }, [user, navigate, searchParams]);
+
+  const fetchInviterInfo = async (code: string) => {
+    try {
+      const { data: invite, error } = await supabase
+        .from('invites')
+        .select(`
+          inviter_id,
+          profiles!invites_inviter_id_fkey(display_name, username)
+        `)
+        .eq('invite_code', code)
+        .eq('is_active', true)
+        .single();
+
+      if (!error && invite) {
+        const profile = invite.profiles as any;
+        setInviterName(profile?.display_name || profile?.username || 'Someone');
+      }
+    } catch (error) {
+      console.error('Error fetching inviter info:', error);
+    }
+  };
+
+  const processInviteRedemption = async (userId: string) => {
+    if (!inviteCode) return;
+
+    try {
+      const { data, error } = await supabase.functions.invoke('process-invite', {
+        body: {
+          inviteCode: inviteCode,
+          inviteeId: userId
+        }
+      });
+
+      if (error) {
+        console.error('Invite processing error:', error);
+        toast({
+          title: "Invite processing failed",
+          description: "Could not process your invite code, but your account was created successfully.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log('Invite processed successfully:', data);
+      
+      if (data?.success) {
+        toast({
+          title: "Invite processed!",
+          description: `You earned ${data.inviteePointsAwarded} bonus points! ${inviterName} earned ${data.inviterPointsAwarded} points for inviting you.`,
+        });
+      }
+    } catch (error) {
+      console.error('Error processing invite:', error);
+    }
+  };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,9 +123,16 @@ export default function Auth() {
         // User exists, try to sign them in
         const { error: signInError } = await signIn(email, password);
         if (!signInError) {
+          // Process invite if present for existing user
+          if (inviteCode && user) {
+            await processInviteRedemption(user.id);
+          }
+          
           toast({
             title: "Welcome back!",
-            description: "You're now signed in",
+            description: inviteCode 
+              ? `You're now signed in! ${inviterName ? `Thanks to ${inviterName}, you` : 'You'} earned bonus points!`
+              : "You're now signed in",
           });
           navigate('/');
         } else {
@@ -69,9 +150,21 @@ export default function Auth() {
         });
       }
     } else {
+      // For new users, wait a moment for the profile to be created, then process invite
+      if (inviteCode) {
+        setTimeout(async () => {
+          const { data: { user: newUser } } = await supabase.auth.getUser();
+          if (newUser) {
+            await processInviteRedemption(newUser.id);
+          }
+        }, 1000);
+      }
+      
       toast({
         title: "Success!",
-        description: "Account created! You're now signed in.",
+        description: inviteCode 
+          ? `Welcome to StreamPlay! ${inviterName ? `Thanks to ${inviterName}, you` : 'You'} earned 25 bonus points!`
+          : "Account created! You're now signed in.",
       });
       setCaptchaValid(false);
       // Auto-navigate to home
@@ -94,6 +187,10 @@ export default function Auth() {
         variant: "destructive",
       });
     } else {
+      // Process invite if present for sign in
+      if (inviteCode && user) {
+        await processInviteRedemption(user.id);
+      }
       navigate('/');
     }
     setLoading(false);
@@ -109,18 +206,28 @@ export default function Auth() {
               StreamPlay
             </h1>
           </div>
-          <p className="text-muted-foreground">Join the premium video streaming platform</p>
+          <p className="text-muted-foreground">
+            {inviteCode 
+              ? `${inviterName} invited you to join the premium video streaming platform`
+              : 'Join the premium video streaming platform'
+            }
+          </p>
         </div>
 
         <Card className="border-border/50 backdrop-blur-sm bg-card/80">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Welcome</CardTitle>
+            <CardTitle className="text-2xl text-center">
+              {inviteCode ? `Welcome to StreamPlay!` : 'Welcome'}
+            </CardTitle>
             <CardDescription className="text-center">
-              Sign in to your account or create a new one
+              {inviteCode 
+                ? "Sign up to get 25 bonus points and start watching premium videos"
+                : "Sign in to your account or create a new one"
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="signin" className="w-full">
+            <Tabs defaultValue={inviteCode ? "signup" : "signin"} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="signin">Sign In</TabsTrigger>
                 <TabsTrigger value="signup">Sign Up</TabsTrigger>

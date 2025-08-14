@@ -12,6 +12,7 @@ import GiftCards from "./pages/GiftCards";
 import About from "./pages/About";
 import Profile from "./pages/Profile";
 import Video from "./pages/Video";
+import Invites from "./pages/Invites";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/gift-cards" element={<GiftCards />} />
             <Route path="/about" element={<About />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/invites" element={<Invites />} />
             <Route path="/video/:id" element={<Video />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
