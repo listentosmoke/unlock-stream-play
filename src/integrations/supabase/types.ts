@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
@@ -61,6 +61,105 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      invite_redemptions: {
+        Row: {
+          id: string
+          invite_id: string
+          invitee_id: string
+          invitee_points_awarded: number
+          inviter_id: string
+          inviter_points_awarded: number
+          redeemed_at: string
+        }
+        Insert: {
+          id?: string
+          invite_id: string
+          invitee_id: string
+          invitee_points_awarded?: number
+          inviter_id: string
+          inviter_points_awarded?: number
+          redeemed_at?: string
+        }
+        Update: {
+          id?: string
+          invite_id?: string
+          invitee_id?: string
+          invitee_points_awarded?: number
+          inviter_id?: string
+          inviter_points_awarded?: number
+          redeemed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_redemptions_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invite_redemptions_invitee_id_fkey"
+            columns: ["invitee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "invite_redemptions_inviter_id_fkey"
+            columns: ["inviter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      invites: {
+        Row: {
+          created_at: string
+          current_uses: number
+          expires_at: string | null
+          id: string
+          invite_code: string
+          invited_email: string | null
+          inviter_id: string
+          is_active: boolean
+          max_uses: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_uses?: number
+          expires_at?: string | null
+          id?: string
+          invite_code: string
+          invited_email?: string | null
+          inviter_id: string
+          is_active?: boolean
+          max_uses?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_uses?: number
+          expires_at?: string | null
+          id?: string
+          invite_code?: string
+          invited_email?: string | null
+          inviter_id?: string
+          is_active?: boolean
+          max_uses?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invites_inviter_id_fkey"
+            columns: ["inviter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -227,7 +326,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_invite_code: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       gift_card_type:
@@ -237,7 +339,12 @@ export type Database = {
         | "steam"
         | "visa"
         | "paypal"
-      transaction_type: "purchase" | "reward" | "unlock" | "gift_card"
+      transaction_type:
+        | "purchase"
+        | "reward"
+        | "unlock"
+        | "gift_card"
+        | "referral"
       user_role: "user" | "admin" | "moderator"
       video_status: "pending" | "approved" | "rejected"
     }
@@ -375,7 +482,13 @@ export const Constants = {
         "visa",
         "paypal",
       ],
-      transaction_type: ["purchase", "reward", "unlock", "gift_card"],
+      transaction_type: [
+        "purchase",
+        "reward",
+        "unlock",
+        "gift_card",
+        "referral",
+      ],
       user_role: ["user", "admin", "moderator"],
       video_status: ["pending", "approved", "rejected"],
     },
