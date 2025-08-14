@@ -67,8 +67,7 @@ export default function Auth() {
     try {
       const { data, error } = await supabase.functions.invoke('process-invite', {
         body: {
-          inviteCode: inviteCode,
-          inviteeId: userId
+          inviteCode: inviteCode
         }
       });
 
