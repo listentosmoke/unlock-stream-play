@@ -23,9 +23,22 @@ const Index = () => {
 
   const fetchVideos = async () => {
     try {
+      // Only select safe fields for public video browsing - exclude sensitive URLs
       const { data, error } = await supabase
         .from('videos')
-        .select('*')
+        .select(`
+          id,
+          title,
+          description,
+          thumbnail_url,
+          duration,
+          unlock_cost,
+          view_count,
+          unlock_count,
+          uploader_id,
+          status,
+          created_at
+        `)
         .eq('status', 'approved')
         .order('created_at', { ascending: false });
 

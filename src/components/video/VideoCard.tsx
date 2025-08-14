@@ -16,14 +16,15 @@ interface VideoCardProps {
     title: string;
     description?: string;
     thumbnail_url?: string;
-    preview_url?: string;
-    full_video_url?: string;
     duration?: number;
     unlock_cost: number;
     view_count: number;
     unlock_count: number;
     uploader_id: string;
     status: string;
+    created_at?: string;
+    // Note: preview_url and full_video_url are intentionally excluded for security
+    // These fields should only be accessed when the user has unlocked the video
   };
   isUnlocked?: boolean;
   onUnlock?: () => void;

@@ -34,14 +34,45 @@ const Video = () => {
 
   const fetchVideo = async () => {
     try {
+      // First, check if user has unlocked this video
+      let userHasUnlocked = false;
+      if (user) {
+        const { data: unlockData } = await supabase
+          .from('user_unlocks')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('video_id', id)
+          .maybeSingle();
+        userHasUnlocked = !!unlockData;
+      }
+
+      // Query based on unlock status - only get sensitive URLs if unlocked
+      const selectFields = userHasUnlocked 
+        ? '*' // Full access for unlocked videos
+        : `
+          id,
+          title,
+          description,
+          thumbnail_url,
+          duration,
+          unlock_cost,
+          view_count,
+          unlock_count,
+          uploader_id,
+          status,
+          created_at,
+          updated_at
+        `; // Safe fields only for locked videos
+
       const { data, error } = await supabase
         .from('videos')
-        .select('*')
+        .select(selectFields)
         .eq('id', id)
         .single();
 
       if (error) throw error;
       setVideo(data);
+      setIsUnlocked(userHasUnlocked);
     } catch (error) {
       console.error('Error fetching video:', error);
       toast({
@@ -54,9 +85,22 @@ const Video = () => {
 
   const fetchRecommendedVideos = async () => {
     try {
+      // Only select safe fields for recommended videos - exclude sensitive URLs
       const { data, error } = await supabase
         .from('videos')
-        .select('*')
+        .select(`
+          id,
+          title,
+          description,
+          thumbnail_url,
+          duration,
+          unlock_cost,
+          view_count,
+          unlock_count,
+          uploader_id,
+          status,
+          created_at
+        `)
         .eq('status', 'approved')
         .neq('id', id)
         .order('created_at', { ascending: false })
@@ -152,6 +196,9 @@ const Video = () => {
 
       await refreshProfile();
       setIsUnlocked(true);
+      
+      // Refetch video data to get the full video URL after unlocking
+      fetchVideo();
       
       toast({
         title: "Video unlocked!",
