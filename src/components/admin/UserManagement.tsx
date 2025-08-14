@@ -156,20 +156,45 @@ export function UserManagement() {
 
   const handleDeleteUser = async (userId: string) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('user_id', userId);
+      // First, verify this isn't the current admin trying to delete themselves
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser?.id === userId) {
+        toast({
+          title: "Error",
+          description: "You cannot delete your own account",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: "User deleted successfully",
-      });
+      // Delete the actual auth user (this will cascade delete the profile due to foreign key)
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+      
+      if (authError) {
+        // If auth deletion fails, try to delete just the profile
+        console.warn('Auth user deletion failed:', authError);
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('user_id', userId);
+          
+        if (profileError) throw profileError;
+        
+        toast({
+          title: "Partial Success",
+          description: "Profile removed but auth user may still exist. Contact system admin.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "User completely deleted from system",
+        });
+      }
 
       fetchUsers();
     } catch (error: any) {
+      console.error('Delete user error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to delete user",
@@ -180,36 +205,61 @@ export function UserManagement() {
 
   const handleAdjustPoints = async (userId: string, pointsAdjustment: number, description: string) => {
     try {
-      // Create transaction record
+      // Validation: Prevent invalid point adjustments
+      if (!pointsAdjustment || isNaN(pointsAdjustment)) {
+        toast({
+          title: "Error",
+          description: "Invalid point amount entered",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get current user points
+      const user = users.find(u => u.user_id === userId);
+      if (!user) throw new Error('User not found');
+
+      // Calculate new points total
+      const newPointsTotal = user.points + pointsAdjustment;
+
+      // Prevent setting negative points
+      if (newPointsTotal < 0) {
+        toast({
+          title: "Error",
+          description: `Cannot deduct ${Math.abs(pointsAdjustment)} points. User only has ${user.points} points.`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Create transaction record first
       const { error: transactionError } = await supabase
         .from('transactions')
         .insert({
           user_id: userId,
           amount: pointsAdjustment,
-          type: pointsAdjustment > 0 ? 'reward' : 'reward',
+          type: 'reward', // Using 'reward' for both positive and negative admin adjustments
           description: description || `Admin adjustment: ${pointsAdjustment > 0 ? '+' : ''}${pointsAdjustment} points`
         });
 
       if (transactionError) throw transactionError;
 
       // Update user points
-      const user = users.find(u => u.user_id === userId);
-      if (!user) throw new Error('User not found');
-
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ points: user.points + pointsAdjustment })
+        .update({ points: newPointsTotal })
         .eq('user_id', userId);
 
       if (updateError) throw updateError;
 
       toast({
         title: "Success",
-        description: `Points ${pointsAdjustment > 0 ? 'added' : 'deducted'} successfully`,
+        description: `Points ${pointsAdjustment > 0 ? 'added' : 'deducted'} successfully. New total: ${newPointsTotal}`,
       });
 
       fetchUsers();
     } catch (error: any) {
+      console.error('Points adjustment error:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to adjust points",
@@ -433,8 +483,15 @@ export function UserManagement() {
                     size="sm"
                     onClick={() => {
                       const points = prompt('Enter points to add (positive number):');
-                      if (points && !isNaN(Number(points))) {
-                        handleAdjustPoints(editingUser.user_id, Number(points), 'Admin bonus points');
+                      const pointsNum = Number(points);
+                      if (points && !isNaN(pointsNum) && pointsNum > 0) {
+                        handleAdjustPoints(editingUser.user_id, pointsNum, 'Admin bonus points');
+                      } else if (points) {
+                        toast({
+                          title: "Error",
+                          description: "Please enter a valid positive number",
+                          variant: "destructive",
+                        });
                       }
                     }}
                   >
@@ -444,9 +501,25 @@ export function UserManagement() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const points = prompt('Enter points to deduct (positive number):');
-                      if (points && !isNaN(Number(points))) {
-                        handleAdjustPoints(editingUser.user_id, -Number(points), 'Admin point deduction');
+                      const maxDeduction = editingUser.points;
+                      const points = prompt(`Enter points to deduct (max: ${maxDeduction}):`);
+                      const pointsNum = Number(points);
+                      if (points && !isNaN(pointsNum) && pointsNum > 0) {
+                        if (pointsNum > maxDeduction) {
+                          toast({
+                            title: "Error",
+                            description: `Cannot deduct more than ${maxDeduction} points`,
+                            variant: "destructive",
+                          });
+                        } else {
+                          handleAdjustPoints(editingUser.user_id, -pointsNum, 'Admin point deduction');
+                        }
+                      } else if (points) {
+                        toast({
+                          title: "Error",
+                          description: "Please enter a valid positive number",
+                          variant: "destructive",
+                        });
                       }
                     }}
                   >
@@ -454,7 +527,7 @@ export function UserManagement() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Current points: {editingUser.points}
+                  Current points: {editingUser.points} (cannot go below 0)
                 </p>
               </div>
             </div>
