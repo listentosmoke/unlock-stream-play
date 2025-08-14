@@ -96,10 +96,18 @@ export default function InviteManagement() {
   };
 
   const fetchInvites = async () => {
+    // Admins can access email data through the admin-specific RLS policy
     const { data, error } = await supabase
       .from('invites')
       .select(`
-        *,
+        id,
+        invite_code,
+        invited_email,
+        max_uses,
+        current_uses,
+        expires_at,
+        created_at,
+        is_active,
         profiles!invites_inviter_id_fkey(username, display_name)
       `)
       .order('created_at', { ascending: false })

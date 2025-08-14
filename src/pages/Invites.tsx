@@ -16,7 +16,7 @@ import { format } from "date-fns";
 interface Invite {
   id: string;
   invite_code: string;
-  invited_email?: string;
+  // invited_email removed for security - not exposed to regular users
   max_uses: number;
   current_uses: number;
   expires_at?: string;
@@ -63,9 +63,18 @@ export default function Invites() {
 
   const fetchInvites = async () => {
     try {
+      // Only select safe fields - exclude invited_email for security
       const { data, error } = await supabase
         .from('invites')
-        .select('*')
+        .select(`
+          id,
+          invite_code,
+          max_uses,
+          current_uses,
+          expires_at,
+          created_at,
+          is_active
+        `)
         .eq('inviter_id', user!.id)
         .order('created_at', { ascending: false });
 
@@ -375,9 +384,6 @@ export default function Invites() {
                           <p>Created: {format(new Date(invite.created_at), 'MMM d, yyyy')}</p>
                           {invite.expires_at && (
                             <p>Expires: {format(new Date(invite.expires_at), 'MMM d, yyyy')}</p>
-                          )}
-                          {invite.invited_email && (
-                            <p>For: {invite.invited_email}</p>
                           )}
                         </div>
                       </div>
