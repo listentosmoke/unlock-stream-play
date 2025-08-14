@@ -14,7 +14,7 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
     const { inviteCode } = await req.json();
 
@@ -31,18 +31,21 @@ serve(async (req) => {
       );
     }
 
-    // Extract JWT token from authorization header
-    const jwt = authHeader.replace('Bearer ', '');
-    
-    // Create service role client for secure operations
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    // Create client with user's auth token (NOT service role)
+    // This ensures auth.uid() works correctly in RPC functions
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
       },
+      global: {
+        headers: {
+          Authorization: authHeader,
+        },
+      },
     });
 
-    // Verify the JWT token and get user info
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(jwt);
+    // Verify the user is authenticated by getting their session
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
       console.error('Authentication failed:', authError);
@@ -54,35 +57,30 @@ serve(async (req) => {
 
     console.log('User authenticated:', user.id);
 
-    // Create client with user context for RPC call
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        persistSession: false,
-      },
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-    });
-
     // Use the secure database function to handle redemption atomically
+    console.log('Calling redeem_invite function with code:', inviteCode);
     const { data, error } = await supabase.rpc('redeem_invite', {
       invite_code_param: inviteCode
     });
 
+    console.log('RPC response - data:', data, 'error:', error);
+
     if (error) {
       console.error('Database function error:', error);
       return new Response(
-        JSON.stringify({ error: 'Failed to process invite redemption' }),
+        JSON.stringify({ 
+          error: 'Failed to process invite redemption',
+          details: error.message 
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!data.success) {
-      console.error('Redemption failed:', data.error);
+    if (!data || !data.success) {
+      const errorMessage = data?.error || 'Unknown redemption error';
+      console.error('Redemption failed:', errorMessage);
       return new Response(
-        JSON.stringify({ error: data.error }),
+        JSON.stringify({ error: errorMessage }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
