@@ -73,6 +73,8 @@ export default function Invites() {
 
   const createInviteForUser = async () => {
     try {
+      console.log('Creating invite - Auth context user:', user);
+      console.log('Creating invite - Auth context loading:', authLoading);
       // Verify user is authenticated and get current auth user
       const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
       
