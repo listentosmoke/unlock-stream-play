@@ -18,12 +18,6 @@ serve(async (req) => {
     
     // Create admin client for privileged operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    
-    // Create client for user operations
-    const authHeader = req.headers.get('Authorization')!;
-    const supabaseClient = createClient(supabaseUrl, Deno.env.get('SUPABASE_ANON_KEY')!, {
-      global: { headers: { Authorization: authHeader } }
-    });
 
     const { inviteCode, inviteeId } = await req.json();
 
@@ -91,14 +85,33 @@ serve(async (req) => {
     const inviterPoints = 50;
     const inviteePoints = 25;
 
-    // Start transaction: Update points and create records
-    const { error: transactionError } = await supabaseAdmin.rpc('begin');
-    
+    // Get current user profiles to update points
+    const [inviterProfile, inviteeProfile] = await Promise.all([
+      supabaseAdmin
+        .from('profiles')
+        .select('points')
+        .eq('user_id', invite.inviter_id)
+        .single(),
+      supabaseAdmin
+        .from('profiles')
+        .select('points')
+        .eq('user_id', inviteeId)
+        .single()
+    ]);
+
+    if (inviterProfile.error || inviteeProfile.error) {
+      console.error('Error fetching profiles:', inviterProfile.error, inviteeProfile.error);
+      return new Response(
+        JSON.stringify({ error: 'User profiles not found' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     try {
       // Update inviter points
       const { error: inviterUpdateError } = await supabaseAdmin
         .from('profiles')
-        .update({ points: invite.inviter_points + inviterPoints })
+        .update({ points: inviterProfile.data.points + inviterPoints })
         .eq('user_id', invite.inviter_id);
 
       if (inviterUpdateError) {
@@ -108,7 +121,7 @@ serve(async (req) => {
       // Update invitee points
       const { error: inviteeUpdateError } = await supabaseAdmin
         .from('profiles')
-        .update({ points: invitee.points + inviteePoints })
+        .update({ points: inviteeProfile.data.points + inviteePoints })
         .eq('user_id', inviteeId);
 
       if (inviteeUpdateError) {
@@ -171,9 +184,6 @@ serve(async (req) => {
         throw new Error(`Failed to update invite usage: ${inviteUpdateError.message}`);
       }
 
-      // Commit transaction
-      await supabaseAdmin.rpc('commit');
-
       console.log('Invite redemption successful');
       
       return new Response(
@@ -186,8 +196,7 @@ serve(async (req) => {
       );
 
     } catch (error) {
-      // Rollback on error
-      await supabaseAdmin.rpc('rollback');
+      console.error('Transaction error:', error);
       throw error;
     }
 

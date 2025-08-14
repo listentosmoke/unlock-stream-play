@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import { GiftCardModeration } from '@/components/admin/GiftCardModeration';
 import { UserManagement } from '@/components/admin/UserManagement';
 import { AdminStatistics } from '@/components/admin/AdminStatistics';
+import InviteManagement from '@/components/admin/InviteManagement';
 
 export default function Admin() {
   const { user, userProfile } = useAuth();
@@ -226,215 +227,212 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue="users" className="space-y-6">
+        <Tabs defaultValue="statistics" className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="users" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              Users
-            </TabsTrigger>
-            <TabsTrigger value="pending" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Pending ({pendingVideos.length})
-            </TabsTrigger>
-            <TabsTrigger value="approved" className="flex items-center gap-2">
-              <Video className="h-4 w-4" />
-              Approved ({approvedVideos.length})
-            </TabsTrigger>
-            <TabsTrigger value="giftcards" className="flex items-center gap-2">
-              <Gift className="h-4 w-4" />
-              Gift Cards
-            </TabsTrigger>
-            <TabsTrigger value="stats" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
-              Statistics
-            </TabsTrigger>
+            <TabsTrigger value="statistics">Statistics</TabsTrigger>
+            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="videos">Videos</TabsTrigger>
+            <TabsTrigger value="gift-cards">Gift Cards</TabsTrigger>
+            <TabsTrigger value="invites">Invites</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="users" className="space-y-6">
+          <TabsContent value="statistics">
+            <AdminStatistics />
+          </TabsContent>
+
+          <TabsContent value="users">
             <UserManagement />
           </TabsContent>
 
-          <TabsContent value="pending" className="space-y-6">
-            {pendingVideos.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-16">
-                  <Video className="h-16 w-16 text-muted-foreground mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">No pending videos</h3>
-                  <p className="text-muted-foreground text-center">
-                    All videos have been reviewed. Check back later for new submissions.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {pendingVideos.map((video) => (
-                  <Card key={video.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-xl">{video.title}</CardTitle>
-                          <CardDescription className="mt-1">
-                            Uploaded by {video.profiles?.display_name || video.profiles?.username || 'Unknown User'}
-                          </CardDescription>
-                        </div>
-                        <Badge variant="outline" className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Pending
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {video.description && (
-                        <p className="text-muted-foreground">{video.description}</p>
-                      )}
-                      
-                      {video.full_video_url && (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-muted-foreground">Video Preview</label>
-                          <video 
-                            src={video.full_video_url} 
-                            controls 
-                            className="w-full max-w-md rounded border"
-                            style={{ maxHeight: '200px' }}
-                          >
-                            Your browser does not support the video tag.
-                          </video>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Coins className="h-4 w-4 text-warning" />
-                          Unlock Cost: {video.unlock_cost} points
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Coins className="h-4 w-4 text-success" />
-                          Creator Reward: {video.reward_points} points
-                        </span>
-                      </div>
-
-                      <div className="flex gap-4 pt-4">
-                        <Button
-                          onClick={() => handleVideoAction(video.id, 'approved')}
-                          className="bg-success hover:bg-success/90"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Approve
-                        </Button>
-                        <Button
-                          onClick={() => handleVideoAction(video.id, 'rejected')}
-                          variant="destructive"
-                        >
-                          <XCircle className="h-4 w-4 mr-2" />
-                          Reject
-                        </Button>
-                        <Button
-                          onClick={() => handleVideoAction(video.id, 'delete')}
-                          variant="outline"
-                          className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </Button>
-                      </div>
+          <TabsContent value="videos" className="space-y-6">
+            <Tabs defaultValue="pending" className="space-y-4">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="pending" className="flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  Pending ({pendingVideos.length})
+                </TabsTrigger>
+                <TabsTrigger value="approved" className="flex items-center gap-2">
+                  <Video className="h-4 w-4" />
+                  Approved ({approvedVideos.length})
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="pending" className="space-y-6">
+                {pendingVideos.length === 0 ? (
+                  <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-16">
+                      <Video className="h-16 w-16 text-muted-foreground mb-4" />
+                      <h3 className="text-xl font-semibold mb-2">No pending videos</h3>
+                      <p className="text-muted-foreground text-center">
+                        All videos have been reviewed. Check back later for new submissions.
+                      </p>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+                ) : (
+                  <div className="space-y-4">
+                    {pendingVideos.map((video) => (
+                      <Card key={video.id}>
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-xl">{video.title}</CardTitle>
+                              <CardDescription className="mt-1">
+                                Uploaded by {video.profiles?.display_name || video.profiles?.username || 'Unknown User'}
+                              </CardDescription>
+                            </div>
+                            <Badge variant="outline" className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              Pending
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {video.description && (
+                            <p className="text-muted-foreground">{video.description}</p>
+                          )}
+                          
+                          {video.full_video_url && (
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-muted-foreground">Video Preview</label>
+                              <video 
+                                src={video.full_video_url} 
+                                controls 
+                                className="w-full max-w-md rounded border"
+                                style={{ maxHeight: '200px' }}
+                              >
+                                Your browser does not support the video tag.
+                              </video>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Coins className="h-4 w-4 text-warning" />
+                              Unlock Cost: {video.unlock_cost} points
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Coins className="h-4 w-4 text-success" />
+                              Creator Reward: {video.reward_points} points
+                            </span>
+                          </div>
 
-          <TabsContent value="approved" className="space-y-6">
-            {approvedVideos.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-16">
-                  <Video className="h-16 w-16 text-muted-foreground mb-4" />
-                  <h3 className="text-xl font-semibold mb-2">No approved videos</h3>
-                  <p className="text-muted-foreground text-center">
-                    No videos have been approved yet.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-4">
-                {approvedVideos.map((video) => (
-                  <Card key={video.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-xl">{video.title}</CardTitle>
-                          <CardDescription className="mt-1">
-                            Uploaded by {video.profiles?.display_name || video.profiles?.username || 'Unknown User'}
-                          </CardDescription>
-                        </div>
-                        <Badge className="bg-success text-success-foreground flex items-center gap-1">
-                          <CheckCircle className="h-3 w-3" />
-                          Approved
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {video.description && (
-                        <p className="text-muted-foreground">{video.description}</p>
-                      )}
-                      
-                      {video.full_video_url && (
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium text-muted-foreground">Video Preview</label>
-                          <video 
-                            src={video.full_video_url} 
-                            controls 
-                            className="w-full max-w-md rounded border"
-                            style={{ maxHeight: '200px' }}
-                          >
-                            Your browser does not support the video tag.
-                          </video>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center gap-6 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Coins className="h-4 w-4 text-warning" />
-                          Unlock Cost: {video.unlock_cost} points
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Coins className="h-4 w-4 text-success" />
-                          Creator Reward: {video.reward_points} points
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Eye className="h-4 w-4 text-primary" />
-                          {video.unlock_count} unlocks
-                        </span>
-                      </div>
+                          <div className="flex gap-4 pt-4">
+                            <Button
+                              onClick={() => handleVideoAction(video.id, 'approved')}
+                              className="bg-success hover:bg-success/90"
+                            >
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                              Approve
+                            </Button>
+                            <Button
+                              onClick={() => handleVideoAction(video.id, 'rejected')}
+                              variant="destructive"
+                            >
+                              <XCircle className="h-4 w-4 mr-2" />
+                              Reject
+                            </Button>
+                            <Button
+                              onClick={() => handleVideoAction(video.id, 'delete')}
+                              variant="outline"
+                              className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
 
-                      <div className="flex gap-4 pt-4">
-                        <Button
-                          onClick={() => handleVideoAction(video.id, 'delete')}
-                          variant="destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Video
-                        </Button>
-                      </div>
+              <TabsContent value="approved" className="space-y-6">
+                {approvedVideos.length === 0 ? (
+                  <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-16">
+                      <Video className="h-16 w-16 text-muted-foreground mb-4" />
+                      <h3 className="text-xl font-semibold mb-2">No approved videos</h3>
+                      <p className="text-muted-foreground text-center">
+                        No videos have been approved yet.
+                      </p>
                     </CardContent>
                   </Card>
-                ))}
-              </div>
-            )}
+                ) : (
+                  <div className="space-y-4">
+                    {approvedVideos.map((video) => (
+                      <Card key={video.id}>
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <CardTitle className="text-xl">{video.title}</CardTitle>
+                              <CardDescription className="mt-1">
+                                Uploaded by {video.profiles?.display_name || video.profiles?.username || 'Unknown User'}
+                              </CardDescription>
+                            </div>
+                            <Badge className="bg-success text-success-foreground flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              Approved
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          {video.description && (
+                            <p className="text-muted-foreground">{video.description}</p>
+                          )}
+                          
+                          {video.full_video_url && (
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium text-muted-foreground">Video Preview</label>
+                              <video 
+                                src={video.full_video_url} 
+                                controls 
+                                className="w-full max-w-md rounded border"
+                                style={{ maxHeight: '200px' }}
+                              >
+                                Your browser does not support the video tag.
+                              </video>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Coins className="h-4 w-4 text-warning" />
+                              Unlock Cost: {video.unlock_cost} points
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Coins className="h-4 w-4 text-success" />
+                              Creator Reward: {video.reward_points} points
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Eye className="h-4 w-4 text-primary" />
+                              {video.unlock_count} unlocks
+                            </span>
+                          </div>
+
+                          <div className="flex gap-4 pt-4">
+                            <Button
+                              onClick={() => handleVideoAction(video.id, 'delete')}
+                              variant="destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Video
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
-          <TabsContent value="giftcards" className="space-y-6">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold mb-2">Gift Card Moderation</h2>
-              <p className="text-muted-foreground">
-                Review and approve gift card submissions to award points to users.
-              </p>
-            </div>
+          <TabsContent value="gift-cards">
             <GiftCardModeration />
           </TabsContent>
 
-          <TabsContent value="stats" className="space-y-6">
-            <AdminStatistics />
+          <TabsContent value="invites">
+            <InviteManagement />
           </TabsContent>
         </Tabs>
       </main>

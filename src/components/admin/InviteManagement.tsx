@@ -100,7 +100,7 @@ export default function InviteManagement() {
       .from('invites')
       .select(`
         *,
-        profiles!invites_inviter_id_fkey(username, display_name, user_id)
+        profiles!invites_inviter_id_fkey(username, display_name)
       `)
       .order('created_at', { ascending: false })
       .limit(100);
