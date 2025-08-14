@@ -335,6 +335,21 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_all_invites_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          current_uses: number
+          expires_at: string
+          id: string
+          invite_code: string
+          invited_email: string
+          inviter_id: string
+          is_active: boolean
+          max_uses: number
+          updated_at: string
+        }[]
+      }
       get_invite_for_redemption: {
         Args: { invite_code_param: string }
         Returns: {
