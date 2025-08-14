@@ -89,12 +89,13 @@ export function UserManagement() {
 
         if (spentError) throw spentError;
 
-        // Get reward transactions (earned)
+        // Get earned transactions (positive rewards, gift cards, referrals)
         const { data: earnedTransactions, error: earnedError } = await supabase
           .from('transactions')
           .select('amount')
           .eq('user_id', profile.user_id)
-          .in('type', ['reward', 'gift_card']);
+          .in('type', ['reward', 'gift_card', 'referral'])
+          .gte('amount', 0); // Only positive amounts
 
         if (earnedError) throw earnedError;
 
@@ -238,7 +239,7 @@ export function UserManagement() {
         .insert({
           user_id: userId,
           amount: pointsAdjustment,
-          type: 'reward', // Using 'reward' for both positive and negative admin adjustments
+          type: pointsAdjustment > 0 ? 'reward' : 'admin_adjustment',
           description: description || `Admin adjustment: ${pointsAdjustment > 0 ? '+' : ''}${pointsAdjustment} points`
         });
 

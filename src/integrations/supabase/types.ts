@@ -356,6 +356,7 @@ export type Database = {
         | "unlock"
         | "gift_card"
         | "referral"
+        | "admin_adjustment"
       user_role: "user" | "admin" | "moderator"
       video_status: "pending" | "approved" | "rejected"
     }
@@ -499,6 +500,7 @@ export const Constants = {
         "unlock",
         "gift_card",
         "referral",
+        "admin_adjustment",
       ],
       user_role: ["user", "admin", "moderator"],
       video_status: ["pending", "approved", "rejected"],
