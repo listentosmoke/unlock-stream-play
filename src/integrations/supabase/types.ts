@@ -389,6 +389,12 @@ export type Database = {
           username: string
         }[]
       }
+      get_my_roles: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          role: Database["public"]["Enums"]["app_role"]
+        }[]
+      }
       get_user_invites: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -416,6 +422,10 @@ export type Database = {
       }
       redeem_invite: {
         Args: { invite_code_param: string }
+        Returns: Json
+      }
+      validate_invite_code: {
+        Args: { code_to_check: string }
         Returns: Json
       }
     }
