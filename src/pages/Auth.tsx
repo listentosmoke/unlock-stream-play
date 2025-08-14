@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Lock, Mail, User, Video } from 'lucide-react';
 import { CaptchaChallenge } from '@/components/auth/CaptchaChallenge';
 import { supabase } from '@/integrations/supabase/client';
+import { getInviteCookie, clearInviteCookie, hasValidInviteCode } from '@/utils/inviteUtils';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -33,9 +34,13 @@ export default function Auth() {
       return;
     }
     
-    // Check for invite code in URL
-    const invite = searchParams.get('invite');
-    if (invite) {
+    // Check for invite code in URL first, then cookies
+    const urlInvite = searchParams.get('invite');
+    const cookieInvite = getInviteCookie();
+    
+    const invite = urlInvite || cookieInvite;
+    
+    if (invite && hasValidInviteCode(invite)) {
       setInviteCode(invite);
       fetchInviterInfo(invite);
     }
@@ -74,19 +79,33 @@ export default function Auth() {
           description: "Could not process your invite code, but your account was created successfully.",
           variant: "destructive"
         });
+        // Clear invalid invite cookie
+        clearInviteCookie();
         return;
       }
 
       console.log('Invite processed successfully:', data);
       
       if (data?.success) {
+        // Clear invite cookie after successful redemption
+        clearInviteCookie();
         toast({
           title: "Invite processed!",
           description: `You earned ${data.inviteePointsAwarded} bonus points! ${inviterName} earned ${data.inviterPointsAwarded} points for inviting you.`,
         });
+      } else {
+        // Clear invalid invite cookie
+        clearInviteCookie();
+        toast({
+          title: "Invite expired",
+          description: data.error || "This invite code is no longer valid.",
+          variant: "destructive"
+        });
       }
     } catch (error) {
       console.error('Error processing invite:', error);
+      // Clear potentially invalid invite cookie
+      clearInviteCookie();
     }
   };
 
@@ -163,13 +182,13 @@ export default function Auth() {
           if (newUser) {
             await processInviteRedemption(newUser.id);
           }
-        }, 1000);
+        }, 2000); // Increased wait time for profile creation
       }
       
       toast({
         title: "Success!",
         description: inviteCode 
-          ? `Welcome to LockedContent! ${inviterName ? `Thanks to ${inviterName}, you` : 'You'} earned 25 bonus points!`
+          ? `Welcome to LockedContent! ${inviterName ? `Thanks to ${inviterName}, you` : 'You'} will earn 25 bonus points!`
           : "Account created! You're now signed in.",
       });
       setCaptchaValid(false);
@@ -194,8 +213,14 @@ export default function Auth() {
       });
     } else {
       // Process invite if present for sign in
-      if (inviteCode && user) {
-        await processInviteRedemption(user.id);
+      if (inviteCode) {
+        // Wait a moment for auth state to settle
+        setTimeout(async () => {
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            await processInviteRedemption(authUser.id);
+          }
+        }, 500);
       }
       navigate('/');
     }
