@@ -65,9 +65,27 @@ export default function Auth() {
     if (!inviteCode) return;
 
     try {
+      // Get the current session to ensure we have a valid token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        console.error('No valid session found for invite processing');
+        toast({
+          title: "Authentication Error",
+          description: "Please try again in a moment.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      console.log('Calling process-invite function with session token');
+      
       const { data, error } = await supabase.functions.invoke('process-invite', {
         body: {
           inviteCode: inviteCode
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
         }
       });
 
