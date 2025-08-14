@@ -40,19 +40,13 @@ export default function Auth() {
 
   const fetchInviterInfo = async (code: string) => {
     try {
-      const { data: invite, error } = await supabase
-        .from('invites')
-        .select(`
-          inviter_id,
-          profiles!invites_inviter_id_fkey(display_name, username)
-        `)
-        .eq('invite_code', code)
-        .eq('is_active', true)
-        .single();
+      // Use the secure function to get only public inviter info
+      const { data, error } = await supabase
+        .rpc('get_inviter_public_info', { invite_code_param: code });
 
-      if (!error && invite) {
-        const profile = invite.profiles as any;
-        setInviterName(profile?.display_name || profile?.username || 'Someone');
+      if (!error && data && data.length > 0) {
+        const inviterInfo = data[0];
+        setInviterName(inviterInfo.display_name || inviterInfo.username || 'Someone');
       }
     } catch (error) {
       console.error('Error fetching inviter info:', error);

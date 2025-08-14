@@ -330,6 +330,13 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_inviter_public_info: {
+        Args: { invite_code_param: string }
+        Returns: {
+          display_name: string
+          username: string
+        }[]
+      }
     }
     Enums: {
       gift_card_type:
