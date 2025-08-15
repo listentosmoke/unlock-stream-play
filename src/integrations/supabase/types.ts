@@ -151,15 +151,7 @@ export type Database = {
           max_uses?: number
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "invites_inviter_id_fkey"
-            columns: ["inviter_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-        ]
+        Relationships: []
       }
       profiles: {
         Row: {
