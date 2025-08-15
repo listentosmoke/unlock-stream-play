@@ -67,8 +67,25 @@ export default function Auth() {
     try {
       console.log('Processing invite redemption for user:', userId);
       
+      // Get current session to pass auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        console.log('No session token available, will retry...');
+        if (retryCount < 3) {
+          setTimeout(() => {
+            processInviteRedemption(userId, retryCount + 1);
+          }, 1000);
+        }
+        return;
+      }
+      
+      console.log('Calling process-invite with session token');
       const { data, error } = await supabase.functions.invoke('process-invite', {
-        body: { inviteCode }
+        body: { inviteCode },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        }
       });
 
       if (error) {
