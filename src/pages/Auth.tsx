@@ -65,55 +65,17 @@ export default function Auth() {
     if (!inviteCode) return;
 
     try {
-      // Get the current session to ensure we have a valid token
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        console.error('No valid session found for invite processing');
-        toast({
-          title: "Authentication Error",
-          description: "Please try again in a moment.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      console.log('Calling process-invite function with session token');
+      console.log('Processing invite redemption for user:', userId);
       
       const { data, error } = await supabase.functions.invoke('process-invite', {
-        body: {
-          inviteCode: inviteCode
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        body: { inviteCode }
       });
 
       if (error) {
         console.error('Invite processing error:', error);
-        toast({
-          title: "Invite processing failed",
-          description: "Could not process your invite code, but your account was created successfully.",
-          variant: "destructive"
-        });
-        // Clear invalid invite cookie
-        clearInviteCookie();
-        return;
-      }
-
-      console.log('Invite processed successfully:', data);
-      
-      if (data?.success) {
-        // Clear invite cookie after successful redemption
-        clearInviteCookie();
-        toast({
-          title: "Invite processed!",
-          description: `You earned ${data.inviteePointsAwarded} bonus points! ${inviterName} earned ${data.inviterPointsAwarded} points for inviting you.`,
-        });
-      } else {
-        // Handle specific error cases
-        if (data.error?.includes("User profile not found") && retryCount < 3) {
-          // Retry after a delay if profile not found
+        
+        // Retry logic for profile creation delay
+        if (error.message?.includes("User profile not found") && retryCount < 3) {
           console.log(`Profile not found, retrying in ${(retryCount + 1) * 1000}ms...`);
           setTimeout(() => {
             processInviteRedemption(userId, retryCount + 1);
@@ -121,17 +83,31 @@ export default function Auth() {
           return;
         }
         
-        // Clear invalid invite cookie for other errors
         clearInviteCookie();
         toast({
           title: "Invite processing failed",
-          description: data.error || "This invite code is no longer valid.",
+          description: "Could not process your invite code, but your account was created successfully.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      if (data?.success) {
+        clearInviteCookie();
+        toast({
+          title: "Invite processed!",
+          description: `You earned ${data.inviteePointsAwarded} bonus points! ${inviterName} earned ${data.inviterPointsAwarded} points for inviting you.`,
+        });
+      } else {
+        clearInviteCookie();
+        toast({
+          title: "Invite processing failed",
+          description: data?.error || "This invite code is no longer valid.",
           variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Error processing invite:', error);
-      // Clear potentially invalid invite cookie
       clearInviteCookie();
     }
   };

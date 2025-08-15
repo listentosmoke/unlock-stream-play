@@ -7,94 +7,65 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-
     const { inviteCode } = await req.json();
-
     console.log('Processing invite redemption for code:', inviteCode);
 
-    // Get the authorization header
-    const authHeader = req.headers.get('authorization');
+    // Create Supabase client with JWT verification enabled
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      {
+        auth: {
+          persistSession: false,
+        },
+        global: {
+          headers: {
+            Authorization: req.headers.get('Authorization') ?? '',
+          },
+        },
+      }
+    );
+
+    // Verify authentication
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    console.log('Auth header present:', !!authHeader);
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.error('No valid authorization header provided');
+    if (authError || !user) {
+      console.error('Authentication failed:', authError?.message);
       return new Response(
         JSON.stringify({ error: 'Authentication required' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Create client with user's auth token
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-      },
-      global: {
-        headers: {
-          Authorization: authHeader,
-        },
-      },
-    });
+    console.log('User authenticated:', user.id);
 
-    console.log('Testing user authentication...');
-    
-    // Verify the user is authenticated by getting their session
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    console.log('Auth check result - user:', !!user, 'error:', authError?.message);
-    
-    if (authError || !user) {
-      console.error('Authentication failed:', authError?.message || 'No user found');
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid authentication',
-          details: authError?.message || 'No user found'
-        }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log('User authenticated successfully:', user.id);
-
-    // Use the secure database function to handle redemption atomically
-    console.log('Calling redeem_invite function with code:', inviteCode);
+    // Call the secure database function
     const { data, error } = await supabase.rpc('redeem_invite', {
       invite_code_param: inviteCode
     });
 
-    console.log('RPC response - data:', data, 'error:', error);
-
     if (error) {
-      console.error('Database function error:', error);
+      console.error('Database error:', error);
       return new Response(
-        JSON.stringify({ 
-          error: 'Failed to process invite redemption',
-          details: error.message 
-        }),
+        JSON.stringify({ error: 'Database error', details: error.message }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!data || !data.success) {
-      const errorMessage = data?.error || 'Unknown redemption error';
-      console.error('Redemption failed:', errorMessage);
+    if (!data?.success) {
+      console.error('Redemption failed:', data?.error);
       return new Response(
-        JSON.stringify({ error: errorMessage }),
+        JSON.stringify({ error: data?.error || 'Redemption failed' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Invite redemption successful:', data);
-    
+    console.log('Invite redemption successful');
     return new Response(
       JSON.stringify({
         success: true,
@@ -106,9 +77,9 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Error processing invite:', error);
+    console.error('Server error:', error);
     return new Response(
-      JSON.stringify({ error: 'Failed to process invite redemption' }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
