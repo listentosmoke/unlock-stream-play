@@ -96,33 +96,37 @@ export default function InviteManagement() {
   };
 
   const fetchInvites = async () => {
-    // Admins can access email data through the admin-specific RLS policy
+    // Use the admin function to get all invites with proper security
     const { data, error } = await supabase
-      .from('invites')
-      .select(`
-        id,
-        invite_code,
-        invited_email,
-        max_uses,
-        current_uses,
-        expires_at,
-        created_at,
-        is_active,
-        profiles!invites_inviter_id_fkey(username, display_name)
-      `)
-      .order('created_at', { ascending: false })
-      .limit(100);
+      .rpc('get_all_invites_admin');
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching invites:', error);
+      throw error;
+    }
 
-    setInvites(data?.map(invite => ({
-      ...invite,
-      inviter: {
-        username: invite.profiles?.username,
-        display_name: invite.profiles?.display_name,
-        email: '' // We don't have email access from profiles
-      }
-    })) || []);
+    // Transform the data to include inviter info by joining with profiles
+    const invitesWithInviters = await Promise.all(
+      (data || []).map(async (invite) => {
+        // Get inviter profile info
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username, display_name')
+          .eq('user_id', invite.inviter_id)
+          .single();
+
+        return {
+          ...invite,
+          inviter: {
+            username: profile?.username,
+            display_name: profile?.display_name,
+            email: '' // We don't have email access from profiles
+          }
+        };
+      })
+    );
+
+    setInvites(invitesWithInviters);
   };
 
   const fetchRedemptions = async () => {
@@ -130,15 +134,35 @@ export default function InviteManagement() {
       .from('invite_redemptions')
       .select(`
         *,
-        inviter:profiles!invite_redemptions_inviter_id_fkey(username, display_name),
-        invitee:profiles!invite_redemptions_invitee_id_fkey(username, display_name),
-        invite:invites!invite_redemptions_invite_id_fkey(invite_code)
+        invites!inner(invite_code)
       `)
       .order('redeemed_at', { ascending: false })
       .limit(100);
 
-    if (error) throw error;
-    setRedemptions(data || []);
+    if (error) {
+      console.error('Error fetching redemptions:', error);
+      throw error;
+    }
+
+    // Transform redemptions to include profile data
+    const redemptionsWithProfiles = await Promise.all(
+      (data || []).map(async (redemption) => {
+        // Get inviter and invitee profiles
+        const [inviterProfile, inviteeProfile] = await Promise.all([
+          supabase.from('profiles').select('username, display_name').eq('user_id', redemption.inviter_id).single(),
+          supabase.from('profiles').select('username, display_name').eq('user_id', redemption.invitee_id).single()
+        ]);
+
+        return {
+          ...redemption,
+          inviter: inviterProfile.data || { username: null, display_name: null },
+          invitee: inviteeProfile.data || { username: null, display_name: null },
+          invite: { invite_code: redemption.invites?.invite_code || 'Unknown' }
+        };
+      })
+    );
+
+    setRedemptions(redemptionsWithProfiles);
   };
 
   const fetchStats = async () => {
