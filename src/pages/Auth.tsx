@@ -12,6 +12,7 @@ import { Lock, Mail, User, Video } from 'lucide-react';
 import { CaptchaChallenge } from '@/components/auth/CaptchaChallenge';
 import { supabase } from '@/integrations/supabase/client';
 import { getInviteCookie, clearInviteCookie, hasValidInviteCode } from '@/utils/inviteUtils';
+import { redeemInviteCode, getInviterPublicInfo } from '@/lib/inviteHelpers';
 
 export default function Auth() {
   const [email, setEmail] = useState('');
@@ -48,12 +49,9 @@ export default function Auth() {
 
   const fetchInviterInfo = async (code: string) => {
     try {
-      // Use the secure function to get only public inviter info
-      const { data, error } = await supabase
-        .rpc('get_inviter_public_info', { invite_code_param: code });
-
-      if (!error && data && data.length > 0) {
-        const inviterInfo = data[0];
+      // Use the database helper to get inviter info
+      const inviterInfo = await getInviterPublicInfo(code);
+      if (inviterInfo) {
         setInviterName(inviterInfo.display_name || inviterInfo.username || 'Someone');
       }
     } catch (error) {
@@ -67,62 +65,46 @@ export default function Auth() {
     try {
       console.log('Processing invite redemption for user:', userId);
       
-      // Get current session to pass auth token
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        console.log('No session token available, will retry...');
-        if (retryCount < 3) {
-          setTimeout(() => {
-            processInviteRedemption(userId, retryCount + 1);
-          }, 1000);
-        }
-        return;
-      }
-      
-      console.log('Calling process-invite with Supabase SDK default headers');
-      const { data, error } = await supabase.functions.invoke('process-invite', {
-        body: { inviteCode }
-      });
+      // Use the database helper to redeem the invite directly
+      const result = await redeemInviteCode(inviteCode);
 
-      if (error) {
-        console.error('Invite processing error:', error);
+      if (result.success) {
+        clearInviteCookie();
+        toast({
+          title: "Welcome!",
+          description: result.message || `Welcome bonus points added to your account!`,
+        });
+      } else {
+        console.error('Invite redemption failed:', result.error);
         
-        // Retry logic for profile creation delay
-        if (error.message?.includes("User profile not found") && retryCount < 3) {
-          console.log(`Profile not found, retrying in ${(retryCount + 1) * 1000}ms...`);
+        // Retry logic for timing issues
+        if (result.error?.includes('profile not found') && retryCount < 5) {
+          console.log(`Profile not ready, retrying in 2s (attempt ${retryCount + 1})`);
           setTimeout(() => {
             processInviteRedemption(userId, retryCount + 1);
-          }, (retryCount + 1) * 1000);
+          }, 2000);
           return;
         }
         
-        clearInviteCookie();
         toast({
-          title: "Invite processing failed",
-          description: "Could not process your invite code, but your account was created successfully.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      if (data?.success) {
-        clearInviteCookie();
-        toast({
-          title: "Invite processed!",
-          description: `You earned ${data.inviteePointsAwarded} bonus points! ${inviterName} earned ${data.inviterPointsAwarded} points for inviting you.`,
-        });
-      } else {
-        clearInviteCookie();
-        toast({
-          title: "Invite processing failed",
-          description: data?.error || "This invite code is no longer valid.",
+          title: "Invite Error", 
+          description: result.error || "Failed to process your invite.",
           variant: "destructive"
         });
       }
     } catch (error) {
       console.error('Error processing invite:', error);
-      clearInviteCookie();
+      if (retryCount < 3) {
+        setTimeout(() => {
+          processInviteRedemption(userId, retryCount + 1);
+        }, 2000);
+      } else {
+        toast({
+          title: "Invite Error",
+          description: "Failed to process your invite after multiple attempts.",
+          variant: "destructive"
+        });
+      }
     }
   };
 

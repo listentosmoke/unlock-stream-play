@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Gift, Users, TrendingUp, Clock, Search, Eye, Ban } from "lucide-react";
 import { format } from "date-fns";
+import { getAllInvitesAdmin, getAllRedemptionsAdmin, updateInviteStatus } from "@/lib/inviteHelpers";
 
 interface InviteData {
   id: string;
@@ -96,71 +97,50 @@ export default function InviteManagement() {
   };
 
   const fetchInvites = async () => {
-    // Use the admin function to get all invites with proper security
-    const { data, error } = await supabase
-      .rpc('get_all_invites_admin');
-
-    if (error) {
-      console.error('Error fetching invites:', error);
-      throw error;
-    }
-
-    // Transform the data to include inviter info by joining with profiles
-    const invitesWithInviters = await Promise.all(
-      (data || []).map(async (invite) => {
-        // Get inviter profile info
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('username, display_name')
-          .eq('user_id', invite.inviter_id)
-          .single();
-
-        return {
-          ...invite,
-          inviter: {
-            username: profile?.username,
-            display_name: profile?.display_name,
-            email: '' // We don't have email access from profiles
-          }
-        };
-      })
-    );
+    // Use the new admin function that includes inviter info
+    const data = await getAllInvitesAdmin();
+    
+    // Transform to match expected interface
+    const invitesWithInviters = data.map(invite => ({
+      id: invite.id,
+      invite_code: invite.invite_code,
+      max_uses: invite.max_uses,
+      current_uses: invite.current_uses,
+      expires_at: invite.expires_at,
+      created_at: invite.created_at,
+      is_active: invite.is_active,
+      inviter: {
+        username: invite.inviter_username,
+        display_name: invite.inviter_display_name,
+        email: ''
+      }
+    }));
 
     setInvites(invitesWithInviters);
   };
 
   const fetchRedemptions = async () => {
-    const { data, error } = await supabase
-      .from('invite_redemptions')
-      .select(`
-        *,
-        invites!inner(invite_code)
-      `)
-      .order('redeemed_at', { ascending: false })
-      .limit(100);
-
-    if (error) {
-      console.error('Error fetching redemptions:', error);
-      throw error;
-    }
-
-    // Transform redemptions to include profile data
-    const redemptionsWithProfiles = await Promise.all(
-      (data || []).map(async (redemption) => {
-        // Get inviter and invitee profiles
-        const [inviterProfile, inviteeProfile] = await Promise.all([
-          supabase.from('profiles').select('username, display_name').eq('user_id', redemption.inviter_id).single(),
-          supabase.from('profiles').select('username, display_name').eq('user_id', redemption.invitee_id).single()
-        ]);
-
-        return {
-          ...redemption,
-          inviter: inviterProfile.data || { username: null, display_name: null },
-          invitee: inviteeProfile.data || { username: null, display_name: null },
-          invite: { invite_code: redemption.invites?.invite_code || 'Unknown' }
-        };
-      })
-    );
+    // Use the new admin function that includes all profile data
+    const data = await getAllRedemptionsAdmin();
+    
+    // Transform to match expected interface
+    const redemptionsWithProfiles = data.map(redemption => ({
+      id: redemption.id,
+      inviter_points_awarded: redemption.inviter_points_awarded,
+      invitee_points_awarded: redemption.invitee_points_awarded,
+      redeemed_at: redemption.redeemed_at,
+      inviter: {
+        username: redemption.inviter_username,
+        display_name: redemption.inviter_display_name
+      },
+      invitee: {
+        username: redemption.invitee_username,
+        display_name: redemption.invitee_display_name
+      },
+      invite: {
+        invite_code: redemption.invite_code
+      }
+    }));
 
     setRedemptions(redemptionsWithProfiles);
   };
@@ -210,19 +190,21 @@ export default function InviteManagement() {
 
   const toggleInviteStatus = async (inviteId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('invites')
-        .update({ is_active: !currentStatus })
-        .eq('id', inviteId);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success",
-        description: `Invite ${!currentStatus ? 'activated' : 'deactivated'} successfully`
-      });
-
-      fetchInvites();
+      const result = await updateInviteStatus(inviteId, !currentStatus);
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || `Invite ${!currentStatus ? 'activated' : 'deactivated'} successfully`
+        });
+        fetchInvites();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to update invite status",
+          variant: "destructive"
+        });
+      }
     } catch (error) {
       console.error('Error toggling invite status:', error);
       toast({

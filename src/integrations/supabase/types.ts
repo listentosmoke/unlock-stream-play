@@ -336,6 +336,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_update_invite_status: {
+        Args: { invite_id_param: string; new_status: boolean }
+        Returns: Json
+      }
       create_user_invite: {
         Args: Record<PropertyKey, never>
         Returns: Json
@@ -343,6 +347,10 @@ export type Database = {
       delete_user_cascade: {
         Args: { target_user_id: string }
         Returns: undefined
+      }
+      ensure_profile_exists: {
+        Args: { target_user_id: string }
+        Returns: Json
       }
       generate_invite_code: {
         Args: Record<PropertyKey, never>
@@ -361,6 +369,39 @@ export type Database = {
           is_active: boolean
           max_uses: number
           updated_at: string
+        }[]
+      }
+      get_all_invites_admin_safe: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          current_uses: number
+          expires_at: string
+          id: string
+          invite_code: string
+          inviter_display_name: string
+          inviter_id: string
+          inviter_username: string
+          is_active: boolean
+          max_uses: number
+          updated_at: string
+        }[]
+      }
+      get_all_redemptions_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          invite_code: string
+          invite_id: string
+          invitee_display_name: string
+          invitee_id: string
+          invitee_points_awarded: number
+          invitee_username: string
+          inviter_display_name: string
+          inviter_id: string
+          inviter_points_awarded: number
+          inviter_username: string
+          redeemed_at: string
         }[]
       }
       get_invite_for_redemption: {
