@@ -80,12 +80,9 @@ export default function Auth() {
         return;
       }
       
-      console.log('Calling process-invite with session token');
+      console.log('Calling process-invite with Supabase SDK default headers');
       const { data, error } = await supabase.functions.invoke('process-invite', {
-        body: { inviteCode },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        }
+        body: { inviteCode }
       });
 
       if (error) {

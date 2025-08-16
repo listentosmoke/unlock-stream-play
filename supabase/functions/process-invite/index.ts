@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth',
 };
 
 serve(async (req) => {
@@ -15,7 +15,17 @@ serve(async (req) => {
     const { inviteCode } = await req.json();
     console.log('[process-invite] Starting processing for code:', inviteCode);
 
-    // Create Supabase client with JWT verification enabled
+    // Log all relevant headers for debugging
+    console.log('[process-invite] Headers received:');
+    console.log('[process-invite] Authorization:', req.headers.get('Authorization'));
+    console.log('[process-invite] X-Supabase-Auth:', req.headers.get('X-Supabase-Auth'));
+    
+    // Extract user token - Supabase SDK sends user JWT in X-Supabase-Auth header
+    // and anon key in Authorization header by default
+    const userToken = req.headers.get('X-Supabase-Auth') || req.headers.get('Authorization');
+    console.log('[process-invite] Using token from:', req.headers.get('X-Supabase-Auth') ? 'X-Supabase-Auth' : 'Authorization');
+
+    // Create Supabase client with the user token
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_ANON_KEY')!,
@@ -25,7 +35,7 @@ serve(async (req) => {
         },
         global: {
           headers: {
-            Authorization: req.headers.get('Authorization') ?? '',
+            Authorization: `Bearer ${userToken?.replace('Bearer ', '')}`,
           },
         },
       }
