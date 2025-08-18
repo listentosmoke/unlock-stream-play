@@ -422,6 +422,19 @@ export type Database = {
           username: string
         }[]
       }
+      get_my_redemptions: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          invite_code: string
+          invite_id: string
+          invitee_id: string
+          invitee_points_awarded: number
+          inviter_id: string
+          inviter_points_awarded: number
+          redeemed_at: string
+        }[]
+      }
       get_my_roles: {
         Args: Record<PropertyKey, never>
         Returns: {

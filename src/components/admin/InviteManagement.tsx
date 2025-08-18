@@ -79,11 +79,53 @@ export default function InviteManagement() {
 
   const fetchData = async () => {
     try {
-      await Promise.all([
-        fetchInvites(),
-        fetchRedemptions(),
-        fetchStats()
+      // Fetch invites and redemptions first
+      const [invitesData, redemptionsData] = await Promise.all([
+        getAllInvitesAdmin(),
+        getAllRedemptionsAdmin()
       ]);
+      
+      // Transform and set invites data
+      const invitesWithInviters = invitesData.map(invite => ({
+        id: invite.id,
+        invite_code: invite.invite_code,
+        max_uses: invite.max_uses,
+        current_uses: invite.current_uses,
+        expires_at: invite.expires_at,
+        created_at: invite.created_at,
+        is_active: invite.is_active,
+        inviter: {
+          username: invite.inviter_username,
+          display_name: invite.inviter_display_name,
+          email: ''
+        }
+      }));
+      
+      // Transform and set redemptions data
+      const redemptionsWithProfiles = redemptionsData.map(redemption => ({
+        id: redemption.id,
+        inviter_points_awarded: redemption.inviter_points_awarded,
+        invitee_points_awarded: redemption.invitee_points_awarded,
+        redeemed_at: redemption.redeemed_at,
+        inviter: {
+          username: redemption.inviter_username,
+          display_name: redemption.inviter_display_name
+        },
+        invitee: {
+          username: redemption.invitee_username,
+          display_name: redemption.invitee_display_name
+        },
+        invite: {
+          invite_code: redemption.invite_code
+        }
+      }));
+
+      setInvites(invitesWithInviters);
+      setRedemptions(redemptionsWithProfiles);
+      
+      // Now calculate stats with the actual data
+      calculateStats(invitesWithInviters, redemptionsWithProfiles);
+      
     } catch (error) {
       console.error('Error fetching invite data:', error);
       toast({
@@ -96,83 +138,50 @@ export default function InviteManagement() {
     }
   };
 
-  const fetchInvites = async () => {
-    // Use the new admin function that includes inviter info
-    const data = await getAllInvitesAdmin();
+  const calculateStats = (invitesData: typeof invites, redemptionsData: typeof redemptions) => {
+    const totalInvites = invitesData.length;
+    const totalRedemptions = redemptionsData.length;
+    const activeInvites = invitesData.filter(i => i.is_active).length;
     
-    // Transform to match expected interface
-    const invitesWithInviters = data.map(invite => ({
-      id: invite.id,
-      invite_code: invite.invite_code,
-      max_uses: invite.max_uses,
-      current_uses: invite.current_uses,
-      expires_at: invite.expires_at,
-      created_at: invite.created_at,
-      is_active: invite.is_active,
-      inviter: {
-        username: invite.inviter_username,
-        display_name: invite.inviter_display_name,
-        email: ''
-      }
-    }));
-
-    setInvites(invitesWithInviters);
-  };
-
-  const fetchRedemptions = async () => {
-    // Use the new admin function that includes all profile data
-    const data = await getAllRedemptionsAdmin();
-    
-    // Transform to match expected interface
-    const redemptionsWithProfiles = data.map(redemption => ({
-      id: redemption.id,
-      inviter_points_awarded: redemption.inviter_points_awarded,
-      invitee_points_awarded: redemption.invitee_points_awarded,
-      redeemed_at: redemption.redeemed_at,
-      inviter: {
-        username: redemption.inviter_username,
-        display_name: redemption.inviter_display_name
-      },
-      invitee: {
-        username: redemption.invitee_username,
-        display_name: redemption.invitee_display_name
-      },
-      invite: {
-        invite_code: redemption.invite_code
-      }
-    }));
-
-    setRedemptions(redemptionsWithProfiles);
-  };
-
-  const fetchStats = async () => {
-    // Get basic stats
-    const [invitesResult, redemptionsResult] = await Promise.all([
-      supabase.from('invites').select('id, is_active'),
-      supabase.from('invite_redemptions').select('inviter_points_awarded, invitee_points_awarded, inviter_id')
-    ]);
-
-    if (invitesResult.error || redemptionsResult.error) {
-      throw new Error('Failed to fetch stats');
-    }
-
-    const totalPointsAwarded = redemptionsResult.data?.reduce((sum, r) => 
-      sum + r.inviter_points_awarded + r.invitee_points_awarded, 0) || 0;
+    const totalPointsAwarded = redemptionsData.reduce((sum, r) => 
+      sum + r.inviter_points_awarded + r.invitee_points_awarded, 0);
 
     // Calculate top inviters from redemptions data
     const inviterStats = new Map();
-    redemptionsResult.data?.forEach(redemption => {
-      const inviterId = redemption.inviter_id;
-      if (!inviterStats.has(inviterId)) {
-        inviterStats.set(inviterId, {
-          user_id: inviterId,
+    redemptionsData.forEach(redemption => {
+      const inviterId = redemption.inviter.username || redemption.inviter.display_name || 'Unknown';
+      const key = `${inviterId}`;
+      if (!inviterStats.has(key)) {
+        inviterStats.set(key, {
+          user_id: key,
+          username: redemption.inviter.username,
+          display_name: redemption.inviter.display_name,
           redemption_count: 0,
-          points_earned: 0
+          points_earned: 0,
+          invite_count: 0
         });
       }
-      const stats = inviterStats.get(inviterId);
+      const stats = inviterStats.get(key);
       stats.redemption_count++;
       stats.points_earned += redemption.inviter_points_awarded;
+    });
+
+    // Add invite counts
+    invitesData.forEach(invite => {
+      const inviterId = invite.inviter.username || invite.inviter.display_name || 'Unknown';
+      const key = `${inviterId}`;
+      if (inviterStats.has(key)) {
+        inviterStats.get(key).invite_count++;
+      } else {
+        inviterStats.set(key, {
+          user_id: key,
+          username: invite.inviter.username,
+          display_name: invite.inviter.display_name,
+          redemption_count: 0,
+          points_earned: 0,
+          invite_count: 1
+        });
+      }
     });
 
     const topInviters = Array.from(inviterStats.values())
@@ -180,10 +189,10 @@ export default function InviteManagement() {
       .slice(0, 10);
 
     setStats({
-      totalInvites: invitesResult.data?.length || 0,
-      totalRedemptions: redemptionsResult.data?.length || 0,
+      totalInvites,
+      totalRedemptions,
       totalPointsAwarded,
-      activeInvites: invitesResult.data?.filter(i => i.is_active).length || 0,
+      activeInvites,
       topInviters
     });
   };
@@ -197,7 +206,7 @@ export default function InviteManagement() {
           title: "Success",
           description: result.message || `Invite ${!currentStatus ? 'activated' : 'deactivated'} successfully`
         });
-        fetchInvites();
+        fetchData();
       } else {
         toast({
           title: "Error",
