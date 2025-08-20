@@ -153,7 +153,7 @@ const Index = () => {
                 <h2 className="text-2xl sm:text-3xl font-bold">Featured Videos</h2>
                 {videos.length > 0 && (
                   <Badge variant="secondary" className="text-xs sm:text-sm self-start sm:self-auto">
-                    {videos.length} videos available
+                    {videos.length + 100}+ videos available
                   </Badge>
                 )}
               </div>
