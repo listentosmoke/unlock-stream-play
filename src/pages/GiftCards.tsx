@@ -4,7 +4,7 @@ import { GiftCardHistory } from '@/components/gift-cards/GiftCardHistory';
 import { useAuth } from '@/components/auth/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
-import { Gift, hand-coins } from 'lucide-react';
+import { Gift, HandCoins } from 'lucide-react';
 
 export default function GiftCards() {
   const { user } = useAuth();
