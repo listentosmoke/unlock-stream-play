@@ -197,7 +197,7 @@ export const deleteInvite = async (inviteId: string): Promise<{ success: boolean
       return { success: false, error: error.message };
     }
 
-    return data as { success: boolean; error?: string; message?: string } || { success: true };
+    return (data as { success: boolean; error?: string; message?: string }) || { success: true };
   } catch (error: any) {
     console.error('Error deleting invite:', error);
     return { success: false, error: error.message || 'Failed to delete invite' };
