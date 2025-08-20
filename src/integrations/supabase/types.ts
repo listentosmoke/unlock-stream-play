@@ -336,6 +336,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_delete_invite: {
+        Args: { invite_id_param: string }
+        Returns: Json
+      }
       admin_update_invite_status: {
         Args: { invite_id_param: string; new_status: boolean }
         Returns: Json

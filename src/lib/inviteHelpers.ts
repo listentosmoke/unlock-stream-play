@@ -182,3 +182,24 @@ export const updateInviteStatus = async (inviteId: string, isActive: boolean): P
     return { success: false, error: 'Failed to update invite status' };
   }
 };
+
+/**
+ * Admin function to permanently delete invite
+ */
+export const deleteInvite = async (inviteId: string): Promise<{ success: boolean; error?: string; message?: string }> => {
+  try {
+    const { data, error } = await supabase.rpc('admin_delete_invite', {
+      invite_id_param: inviteId
+    });
+
+    if (error) {
+      console.error('Error deleting invite:', error);
+      return { success: false, error: error.message };
+    }
+
+    return data as { success: boolean; error?: string; message?: string } || { success: true };
+  } catch (error: any) {
+    console.error('Error deleting invite:', error);
+    return { success: false, error: error.message || 'Failed to delete invite' };
+  }
+};

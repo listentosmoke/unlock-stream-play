@@ -6,9 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Gift, Users, TrendingUp, Clock, Search, Eye, Ban } from "lucide-react";
+import { Gift, Users, TrendingUp, Clock, Search, Eye, Ban, Trash2 } from "lucide-react";
 import { format } from "date-fns";
-import { getAllInvitesAdmin, getAllRedemptionsAdmin, updateInviteStatus } from "@/lib/inviteHelpers";
+import { getAllInvitesAdmin, getAllRedemptionsAdmin, updateInviteStatus, deleteInvite } from "@/lib/inviteHelpers";
 
 interface InviteData {
   id: string;
@@ -224,6 +224,37 @@ export default function InviteManagement() {
     }
   };
 
+  const handleDeleteInvite = async (inviteId: string, inviteCode: string) => {
+    if (!confirm(`Are you sure you want to permanently delete invite code "${inviteCode}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const result = await deleteInvite(inviteId);
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: result.message || "Invite deleted successfully"
+        });
+        fetchData();
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to delete invite",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting invite:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete invite",
+        variant: "destructive"
+      });
+    }
+  };
+
   const filteredInvites = invites.filter(invite =>
     invite.invite_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
     invite.inviter.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -372,6 +403,14 @@ export default function InviteManagement() {
                               Activate
                             </>
                           )}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDeleteInvite(invite.id, invite.invite_code)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
                         </Button>
                       </div>
                     </div>

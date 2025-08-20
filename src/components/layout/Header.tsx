@@ -56,7 +56,7 @@ export function Header() {
                 <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
                   <Link to="/gift-cards">
                     <Gift className="h-4 w-4 mr-2" />
-                    Gift Cards
+                    Get Points
                   </Link>
                 </Button>
 
