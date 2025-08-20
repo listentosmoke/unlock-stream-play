@@ -132,7 +132,7 @@ const Index = () => {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-8 sm:mb-12 px-4">
               <div className="text-center p-4 sm:p-6 rounded-lg bg-card border border-border/50 hover:border-primary/20 transition-colors">
                 <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-primary mx-auto mb-2" />
-                <h3 className="text-xl sm:text-2xl font-bold">{videos.length + 100}</h3>
+                <h3 className="text-xl sm:text-2xl font-bold">{videos.length + 100}+</h3>
                 <p className="text-muted-foreground text-sm sm:text-base">Premium Videos</p>
               </div>
               <div className="text-center p-4 sm:p-6 rounded-lg bg-card border border-border/50 hover:border-success/20 transition-colors">
