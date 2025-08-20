@@ -5,7 +5,7 @@ import { VideoCard } from '@/components/video/VideoCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { Coins, Upload, TrendingUp } from 'lucide-react';
+import { Coins, Upload, TrendingUp, LogIn } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const Index = () => {
@@ -160,9 +160,9 @@ const Index = () => {
 
               {videos.length === 0 ? (
                 <div className="text-center py-12 sm:py-16">
-                  <Upload className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg sm:text-xl font-semibold mb-2">No videos yet</h3>
-                  <p className="text-muted-foreground mb-6 px-4 text-sm sm:text-base">Be the first to upload a video and earn points!</p>
+                  <LogIn className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg sm:text-xl font-semibold mb-2">Register To View</h3>
+                  <p className="text-muted-foreground mb-6 px-4 text-sm sm:text-base">Register to view the full content</p>
                   {user && (
                     <Button className="w-full sm:w-auto" asChild>
                       <Link to="/upload">Upload First Video</Link>
