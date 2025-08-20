@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/components/auth/AuthContext';
-import { Video, Coins, Upload, Settings, LogOut, User, Gift, HandCoins } from 'lucide-react';
+import { Video, Coins, Upload, Settings, LogOut, User, Gift, HandCoins, Users } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
