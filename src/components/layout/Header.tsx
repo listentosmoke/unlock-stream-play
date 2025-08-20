@@ -69,7 +69,7 @@ export function Header() {
                 
                 <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
                   <Link to="/invites">
-                    <User className="h-4 w-4 mr-2" />
+                    <Users className="h-4 w-4 mr-2" />
                     Invite Friends
                   </Link>
                 </Button>
