@@ -127,49 +127,105 @@ export default function MultiFileUpload() {
     try {
       updateFile(uploadFile.id, { status: 'uploading', progress: 0 });
 
-      // Check file size (100MB limit for demonstration)
-      const maxFileSize = 100 * 1024 * 1024; // 100MB
-      if (uploadFile.file.size > maxFileSize) {
-        throw new Error(`File too large. Maximum size is ${Math.round(maxFileSize / (1024 * 1024))}MB`);
-      }
+      // Check file size - use Catbox for files over 100MB
+      const maxSupabaseSize = 100 * 1024 * 1024; // 100MB
+      const isLargeFile = uploadFile.file.size > maxSupabaseSize;
 
-      // Generate thumbnail
+      // Generate thumbnail first
       updateFile(uploadFile.id, { progress: 10 });
       const thumbnailBlob = await generateVideoThumbnail(uploadFile.file);
       
-      // Upload video with progress tracking
       updateFile(uploadFile.id, { progress: 20 });
-      const fileExt = uploadFile.file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}-${uploadFile.id}.${fileExt}`;
+
+      let videoUrl: string;
       
-      // Upload with proper error handling and progress simulation
-      const uploadPromise = supabase.storage
-        .from('videos')
-        .upload(fileName, uploadFile.file, {
-          cacheControl: '3600',
-          upsert: false
+      if (isLargeFile) {
+        // Upload large files to Catbox.moe via edge function
+        console.log('Uploading large file to Catbox.moe...');
+        
+        const formData = new FormData();
+        formData.append('file', uploadFile.file);
+        
+        // Upload with progress tracking
+        const xhr = new XMLHttpRequest();
+        
+        const uploadPromise = new Promise<string>((resolve, reject) => {
+          xhr.upload.addEventListener('progress', (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = (event.loaded / event.total) * 60; // 60% of total progress for upload
+              updateFile(uploadFile.id, { progress: 20 + percentComplete });
+            }
+          });
+          
+          xhr.addEventListener('load', () => {
+            if (xhr.status === 200) {
+              try {
+                const response = JSON.parse(xhr.responseText);
+                if (response.success && response.url) {
+                  resolve(response.url);
+                } else {
+                  reject(new Error(response.error || 'Upload failed'));
+                }
+              } catch (e) {
+                reject(new Error('Invalid response from server'));
+              }
+            } else {
+              reject(new Error(`Upload failed with status ${xhr.status}`));
+            }
+          });
+          
+          xhr.addEventListener('error', () => {
+            reject(new Error('Network error during upload'));
+          });
+          
+          xhr.open('POST', 'https://yuqujmglvhnkgqflnlys.supabase.co/functions/v1/upload-large-video');
+          
+          // Get auth session for authorization
+          supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.access_token) {
+              xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+            }
+            xhr.send(formData);
+          }).catch(() => {
+            // If can't get session, send without auth
+            xhr.send(formData);
+          });
         });
+        
+        videoUrl = await uploadPromise;
+        console.log('Large file uploaded to Catbox:', videoUrl);
+        
+      } else {
+        // Upload smaller files to Supabase as before
+        const fileExt = uploadFile.file.name.split('.').pop();
+        const fileName = `${user.id}/${Date.now()}-${uploadFile.id}.${fileExt}`;
+        
+        // Upload to Supabase with progress tracking
+        const { error: uploadError } = await supabase.storage
+          .from('videos')
+          .upload(fileName, uploadFile.file, {
+            cacheControl: '3600',
+            upsert: false
+          });
 
-      // Simulate progress during upload
-      const progressInterval = setInterval(() => {
-        setUploadFiles(prev => prev.map(f => 
-          f.id === uploadFile.id 
-            ? { ...f, progress: Math.min(f.progress + 5, 70) }
-            : f
-        ));
-      }, 500);
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          throw new Error(uploadError.message || 'Failed to upload video');
+        }
 
-      const { error: uploadError } = await uploadPromise;
-      clearInterval(progressInterval);
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw new Error(uploadError.message || 'Failed to upload video');
+        updateFile(uploadFile.id, { progress: 80 });
+        
+        // Get public URL from Supabase
+        const { data: { publicUrl } } = supabase.storage
+          .from('videos')
+          .getPublicUrl(fileName);
+        
+        videoUrl = publicUrl;
       }
 
-      updateFile(uploadFile.id, { progress: 75 });
+      updateFile(uploadFile.id, { progress: 85 });
 
-      // Upload thumbnail
+      // Upload thumbnail to Supabase (always use Supabase for thumbnails)
       const thumbnailFileName = `thumbnails/${user.id}/${Date.now()}-${uploadFile.id}-thumbnail.jpg`;
       const { error: thumbnailUploadError } = await supabase.storage
         .from('videos')
@@ -183,19 +239,14 @@ export default function MultiFileUpload() {
         throw new Error('Failed to upload thumbnail');
       }
 
-      updateFile(uploadFile.id, { progress: 85 });
-
-      // Get public URLs
-      const { data: { publicUrl: videoUrl } } = supabase.storage
-        .from('videos')
-        .getPublicUrl(fileName);
-
+      // Get thumbnail URL
       const { data: { publicUrl: thumbnailUrl } } = supabase.storage
         .from('videos')
         .getPublicUrl(thumbnailFileName);
 
-      // Insert video record with proper error handling
       updateFile(uploadFile.id, { progress: 95 });
+
+      // Insert video record with proper error handling
       const videoData = {
         uploader_id: user.id,
         title: uploadFile.title.trim(),
@@ -217,6 +268,7 @@ export default function MultiFileUpload() {
       }
 
       updateFile(uploadFile.id, { status: 'completed', progress: 100 });
+      
     } catch (error: any) {
       console.error('Upload file error:', error);
       updateFile(uploadFile.id, { 
