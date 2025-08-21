@@ -23,7 +23,8 @@ const Index = () => {
 
   const fetchVideos = async () => {
     try {
-      // Only select safe fields for public video browsing - exclude sensitive URLs
+      // Fetch approved videos for everyone (authenticated or not)
+      // This allows unauthenticated users to see what's available
       const { data, error } = await supabase
         .from('videos')
         .select(`
@@ -40,12 +41,17 @@ const Index = () => {
           created_at
         `)
         .eq('status', 'approved')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(20);
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') { // Ignore "no rows" error
+        throw error;
+      }
       setVideos(data || []);
     } catch (error) {
       console.error('Error fetching videos:', error);
+      // Set empty array on error to show incentive message
+      setVideos([]);
     } finally {
       setLoading(false);
     }
@@ -161,11 +167,19 @@ const Index = () => {
               {videos.length === 0 ? (
                 <div className="text-center py-12 sm:py-16">
                   <LogIn className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg sm:text-xl font-semibold mb-2">Register To View</h3>
-                  <p className="text-muted-foreground mb-6 px-4 text-sm sm:text-base">Register to view the full content</p>
-                  {user && (
+                  <h3 className="text-lg sm:text-xl font-semibold mb-2">
+                    {user ? 'No Videos Available Yet' : 'Join to Access Premium Videos'}
+                  </h3>
+                  <p className="text-muted-foreground mb-6 px-4 text-sm sm:text-base">
+                    {user ? 'Be the first to upload content!' : 'Register to unlock exclusive video content and start earning points'}
+                  </p>
+                  {user ? (
                     <Button className="w-full sm:w-auto" asChild>
                       <Link to="/upload">Upload First Video</Link>
+                    </Button>
+                  ) : (
+                    <Button className="w-full sm:w-auto" asChild>
+                      <Link to="/auth">Sign Up Now</Link>
                     </Button>
                   )}
                 </div>
@@ -174,15 +188,17 @@ const Index = () => {
                      <VideoCard 
                        key={video.id} 
                        video={video}
-                       isUnlocked={userUnlocks.includes(video.id)}
+                       isUnlocked={user ? userUnlocks.includes(video.id) : false}
                        onUnlock={() => {
-                         setUserUnlocks(prev => [...prev, video.id]);
-                         fetchUserUnlocks();
+                         if (user) {
+                           setUserUnlocks(prev => [...prev, video.id]);
+                           fetchUserUnlocks();
+                         }
                        }}
                      />
                    ))}
                  </div>
-               )}
+                )}
             </div>
       </main>
     </div>

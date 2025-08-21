@@ -127,32 +127,63 @@ export default function MultiFileUpload() {
     try {
       updateFile(uploadFile.id, { status: 'uploading', progress: 0 });
 
+      // Check file size (100MB limit for demonstration)
+      const maxFileSize = 100 * 1024 * 1024; // 100MB
+      if (uploadFile.file.size > maxFileSize) {
+        throw new Error(`File too large. Maximum size is ${Math.round(maxFileSize / (1024 * 1024))}MB`);
+      }
+
       // Generate thumbnail
       updateFile(uploadFile.id, { progress: 10 });
       const thumbnailBlob = await generateVideoThumbnail(uploadFile.file);
       
-      // Upload video with progress
+      // Upload video with progress tracking
       updateFile(uploadFile.id, { progress: 20 });
       const fileExt = uploadFile.file.name.split('.').pop();
       const fileName = `${user.id}/${Date.now()}-${uploadFile.id}.${fileExt}`;
       
-      const { error: uploadError } = await supabase.storage
+      // Upload with proper error handling and progress simulation
+      const uploadPromise = supabase.storage
         .from('videos')
-        .upload(fileName, uploadFile.file);
+        .upload(fileName, uploadFile.file, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      if (uploadError) throw uploadError;
+      // Simulate progress during upload
+      const progressInterval = setInterval(() => {
+        setUploadFiles(prev => prev.map(f => 
+          f.id === uploadFile.id 
+            ? { ...f, progress: Math.min(f.progress + 5, 70) }
+            : f
+        ));
+      }, 500);
 
-      // Simulate progress for user feedback
-      updateFile(uploadFile.id, { progress: 80 });
+      const { error: uploadError } = await uploadPromise;
+      clearInterval(progressInterval);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw new Error(uploadError.message || 'Failed to upload video');
+      }
+
+      updateFile(uploadFile.id, { progress: 75 });
 
       // Upload thumbnail
-      updateFile(uploadFile.id, { progress: 85 });
       const thumbnailFileName = `thumbnails/${user.id}/${Date.now()}-${uploadFile.id}-thumbnail.jpg`;
       const { error: thumbnailUploadError } = await supabase.storage
         .from('videos')
-        .upload(thumbnailFileName, thumbnailBlob);
+        .upload(thumbnailFileName, thumbnailBlob, {
+          cacheControl: '3600',
+          upsert: false
+        });
 
-      if (thumbnailUploadError) throw thumbnailUploadError;
+      if (thumbnailUploadError) {
+        console.error('Thumbnail upload error:', thumbnailUploadError);
+        throw new Error('Failed to upload thumbnail');
+      }
+
+      updateFile(uploadFile.id, { progress: 85 });
 
       // Get public URLs
       const { data: { publicUrl: videoUrl } } = supabase.storage
@@ -163,28 +194,34 @@ export default function MultiFileUpload() {
         .from('videos')
         .getPublicUrl(thumbnailFileName);
 
-      // Insert video record
+      // Insert video record with proper error handling
       updateFile(uploadFile.id, { progress: 95 });
-      const { error } = await supabase
-        .from('videos')
-        .insert({
-          uploader_id: user.id,
-          title: uploadFile.title,
-          description: uploadFile.description,
-          full_video_url: videoUrl,
-          thumbnail_url: thumbnailUrl,
-          unlock_cost: 10,
-          reward_points: 5,
-          status: 'pending'
-        });
+      const videoData = {
+        uploader_id: user.id,
+        title: uploadFile.title.trim(),
+        description: uploadFile.description?.trim() || null,
+        full_video_url: videoUrl,
+        thumbnail_url: thumbnailUrl,
+        unlock_cost: 10,
+        reward_points: 5,
+        status: 'pending' as const
+      };
 
-      if (error) throw error;
+      const { error: insertError } = await supabase
+        .from('videos')
+        .insert(videoData);
+
+      if (insertError) {
+        console.error('Database insert error:', insertError);
+        throw new Error('Failed to save video information');
+      }
 
       updateFile(uploadFile.id, { status: 'completed', progress: 100 });
     } catch (error: any) {
+      console.error('Upload file error:', error);
       updateFile(uploadFile.id, { 
         status: 'error', 
-        error: error.message || 'Upload failed',
+        error: error?.message || 'Upload failed',
         progress: 0 
       });
     }
@@ -205,7 +242,7 @@ export default function MultiFileUpload() {
     setIsUploading(true);
 
     // Upload files in parallel with concurrency limit
-    const concurrencyLimit = 3;
+    const concurrencyLimit = 2; // Reduced for large files
     const batches = [];
     
     for (let i = 0; i < validFiles.length; i += concurrencyLimit) {
@@ -221,15 +258,15 @@ export default function MultiFileUpload() {
     const completed = uploadFiles.filter(f => f.status === 'completed').length;
     const failed = uploadFiles.filter(f => f.status === 'error').length;
 
-    if (completed > 0) {
+    if (completed > 0 || failed > 0) {
       toast({
-        title: "Upload Complete!",
-        description: `${completed} video(s) uploaded successfully${failed > 0 ? `, ${failed} failed` : ''}`,
+        title: "Upload Process Complete!",
+        description: `${completed} video(s) uploaded successfully${failed > 0 ? `, ${failed} had errors` : ''}`,
       });
     }
 
-    // Auto-navigate if all uploads completed successfully
-    if (failed === 0 && completed > 0) {
+    // Always allow navigation after uploads complete (even if some failed)
+    if (completed > 0) {
       setTimeout(() => navigate('/'), 2000);
     }
   };
@@ -401,9 +438,9 @@ export default function MultiFileUpload() {
           {/* Action Buttons */}
           {uploadFiles.length > 0 && (
             <div className="flex gap-4">
-              <Button 
+                <Button 
                 onClick={startUpload}
-                disabled={isUploading || uploadFiles.every(f => f.status === 'completed')}
+                disabled={isUploading || uploadFiles.filter(f => f.status === 'pending').length === 0}
                 className="flex-1"
               >
                 {isUploading ? (
@@ -423,7 +460,7 @@ export default function MultiFileUpload() {
                 onClick={() => navigate('/')}
                 disabled={isUploading}
               >
-                {uploadFiles.some(f => f.status === 'completed') ? 'Done' : 'Cancel'}
+                {uploadFiles.some(f => f.status === 'completed') ? 'Continue' : 'Cancel'}
               </Button>
             </div>
           )}
