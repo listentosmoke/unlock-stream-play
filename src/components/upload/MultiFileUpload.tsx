@@ -125,16 +125,37 @@ export default function MultiFileUpload() {
 
   const checkBucketSize = async (): Promise<number> => {
     try {
-      const { data, error } = await supabase.storage
-        .from('videos')
-        .list('', { limit: 1000 });
+      // Get all files recursively from the bucket
+      const getAllFiles = async (folder = '', allFiles: any[] = []): Promise<any[]> => {
+        const { data, error } = await supabase.storage
+          .from('videos')
+          .list(folder, { limit: 1000 });
+        
+        if (error) throw error;
+        
+        for (const file of data || []) {
+          if (file.name) {
+            // It's a file, get its size
+            const fullPath = folder ? `${folder}/${file.name}` : file.name;
+            allFiles.push({ ...file, path: fullPath });
+          }
+        }
+        
+        return allFiles;
+      };
+
+      const files = await getAllFiles();
       
-      if (error) {
-        console.error('Error checking bucket size:', error);
-        return 0;
+      // Calculate total size from all files
+      let totalSize = 0;
+      for (const file of files) {
+        if (file.metadata?.size) {
+          totalSize += file.metadata.size;
+        }
       }
       
-      return data?.reduce((total, file) => total + (file.metadata?.size || 0), 0) || 0;
+      console.log(`Current bucket size: ${totalSize} bytes (${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
+      return totalSize;
     } catch (error) {
       console.error('Error checking bucket size:', error);
       return 0;
@@ -144,8 +165,7 @@ export default function MultiFileUpload() {
   const uploadToCatbox = async (file: File, onProgress?: (progress: number) => void): Promise<string> => {
     return new Promise((resolve, reject) => {
       const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('fileToUpload', file);
+      formData.append('file', file);
 
       const xhr = new XMLHttpRequest();
 
@@ -158,23 +178,37 @@ export default function MultiFileUpload() {
 
       xhr.addEventListener('load', () => {
         if (xhr.status === 200) {
-          const responseText = xhr.responseText.trim();
-          if (responseText.startsWith('https://files.catbox.moe/')) {
-            resolve(responseText);
-          } else {
-            reject(new Error(`Invalid Catbox response: ${responseText}`));
+          try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.success && response.url) {
+              resolve(response.url);
+            } else {
+              reject(new Error(response.error || 'Upload failed'));
+            }
+          } catch (e) {
+            reject(new Error('Invalid response from server'));
           }
         } else {
-          reject(new Error(`Catbox upload failed with status ${xhr.status}`));
+          reject(new Error(`Upload failed with status ${xhr.status}`));
         }
       });
 
       xhr.addEventListener('error', () => {
-        reject(new Error('Network error during Catbox upload'));
+        reject(new Error('Network error during upload'));
       });
 
-      xhr.open('POST', 'https://catbox.moe/user/api.php');
-      xhr.send(formData);
+      xhr.open('POST', 'https://yuqujmglvhnkgqflnlys.supabase.co/functions/v1/catbox-upload');
+      
+      // Get auth session for authorization
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.access_token) {
+          xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+        }
+        xhr.send(formData);
+      }).catch(() => {
+        // If can't get session, send without auth (function allows anonymous access)
+        xhr.send(formData);
+      });
     });
   };
 
