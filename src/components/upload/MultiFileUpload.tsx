@@ -123,13 +123,64 @@ export default function MultiFileUpload() {
     setUploadFiles(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f));
   };
 
+  const checkBucketSize = async (): Promise<number> => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('videos')
+        .list('', { limit: 1000 });
+      
+      if (error) {
+        console.error('Error checking bucket size:', error);
+        return 0;
+      }
+      
+      return data?.reduce((total, file) => total + (file.metadata?.size || 0), 0) || 0;
+    } catch (error) {
+      console.error('Error checking bucket size:', error);
+      return 0;
+    }
+  };
+
+  const uploadToCatbox = async (file: File, onProgress?: (progress: number) => void): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('reqtype', 'fileupload');
+      formData.append('fileToUpload', file);
+
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable && onProgress) {
+          const percentComplete = (event.loaded / event.total) * 100;
+          onProgress(percentComplete);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status === 200) {
+          const responseText = xhr.responseText.trim();
+          if (responseText.startsWith('https://files.catbox.moe/')) {
+            resolve(responseText);
+          } else {
+            reject(new Error(`Invalid Catbox response: ${responseText}`));
+          }
+        } else {
+          reject(new Error(`Catbox upload failed with status ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Network error during Catbox upload'));
+      });
+
+      xhr.open('POST', 'https://catbox.moe/user/api.php');
+      xhr.send(formData);
+    });
+  };
+
   const uploadFile = async (uploadFile: UploadFile) => {
     try {
       updateFile(uploadFile.id, { status: 'uploading', progress: 0 });
-
-      // Check file size - use Catbox for files over 100MB
-      const maxSupabaseSize = 100 * 1024 * 1024; // 100MB
-      const isLargeFile = uploadFile.file.size > maxSupabaseSize;
 
       // Generate thumbnail first
       updateFile(uploadFile.id, { progress: 10 });
@@ -137,63 +188,30 @@ export default function MultiFileUpload() {
       
       updateFile(uploadFile.id, { progress: 20 });
 
+      // Check file size and bucket size
+      const maxSupabaseSize = 100 * 1024 * 1024; // 100MB
+      const maxBucketSize = 45 * 1024 * 1024; // 45MB
+      const isLargeFile = uploadFile.file.size > maxSupabaseSize;
+      
+      // Check current bucket size
+      const currentBucketSize = await checkBucketSize();
+      const wouldExceedBucket = (currentBucketSize + uploadFile.file.size) > maxBucketSize;
+      
       let videoUrl: string;
       
-      if (isLargeFile) {
-        // Upload large files to Catbox.moe via edge function
-        console.log('Uploading large file to Catbox.moe...');
-        
-        const formData = new FormData();
-        formData.append('file', uploadFile.file);
-        
-        // Upload with progress tracking
-        const xhr = new XMLHttpRequest();
-        
-        const uploadPromise = new Promise<string>((resolve, reject) => {
-          xhr.upload.addEventListener('progress', (event) => {
-            if (event.lengthComputable) {
-              const percentComplete = (event.loaded / event.total) * 60; // 60% of total progress for upload
-              updateFile(uploadFile.id, { progress: 20 + percentComplete });
-            }
-          });
-          
-          xhr.addEventListener('load', () => {
-            if (xhr.status === 200) {
-              try {
-                const response = JSON.parse(xhr.responseText);
-                if (response.success && response.url) {
-                  resolve(response.url);
-                } else {
-                  reject(new Error(response.error || 'Upload failed'));
-                }
-              } catch (e) {
-                reject(new Error('Invalid response from server'));
-              }
-            } else {
-              reject(new Error(`Upload failed with status ${xhr.status}`));
-            }
-          });
-          
-          xhr.addEventListener('error', () => {
-            reject(new Error('Network error during upload'));
-          });
-          
-          xhr.open('POST', 'https://yuqujmglvhnkgqflnlys.supabase.co/functions/v1/upload-large-video');
-          
-          // Get auth session for authorization
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.access_token) {
-              xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
-            }
-            xhr.send(formData);
-          }).catch(() => {
-            // If can't get session, send without auth
-            xhr.send(formData);
-          });
+      if (isLargeFile || wouldExceedBucket) {
+        // Upload to Catbox.moe directly from browser
+        console.log('Uploading to Catbox.moe...', { 
+          fileSize: uploadFile.file.size, 
+          currentBucketSize, 
+          wouldExceed: wouldExceedBucket 
         });
         
-        videoUrl = await uploadPromise;
-        console.log('Large file uploaded to Catbox:', videoUrl);
+        videoUrl = await uploadToCatbox(uploadFile.file, (progress) => {
+          updateFile(uploadFile.id, { progress: 20 + (progress * 0.6) }); // 60% of progress for upload
+        });
+        
+        console.log('File uploaded to Catbox:', videoUrl);
         
       } else {
         // Upload smaller files to Supabase as before
