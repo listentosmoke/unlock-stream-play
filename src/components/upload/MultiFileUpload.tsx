@@ -134,8 +134,8 @@ export default function MultiFileUpload() {
         if (error) throw error;
         
         for (const file of data || []) {
-          if (file.name) {
-            // It's a file, get its size
+          if (file.name && file.metadata?.size) {
+            // Only count files that have metadata with size
             const fullPath = folder ? `${folder}/${file.name}` : file.name;
             allFiles.push({ ...file, path: fullPath });
           }
@@ -162,80 +162,52 @@ export default function MultiFileUpload() {
     }
   };
 
-  const uploadToCatbox = async (file: File, onProgress?: (progress: number) => void): Promise<string> => {
-    // Try multiple file hosting services with XMLHttpRequest for progress tracking
-    const services = [
-      {
-        name: '0x0.st',
-        url: 'https://0x0.st',
-        formField: 'file'
-      },
-      {
-        name: 'file.io', 
-        url: 'https://file.io',
-        formField: 'file'
-      }
-    ];
+  // Upload large file to Catbox via edge function with XHR progress
+  const uploadLargeViaEdge = (file: File, onProgress?: (progress: number) => void): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // Use the hardcoded Supabase URL to construct functions URL
+      const endpoint = 'https://yuqujmglvhnkgqflnlys.functions.supabase.co/catbox-upload';
 
-    for (const service of services) {
-      try {
-        console.log(`Trying ${service.name}...`);
-        
-        const url = await new Promise<string>((resolve, reject) => {
-          const formData = new FormData();
-          formData.append(service.formField, file);
+      const formData = new FormData();
+      formData.append('file', file, file.name);
 
-          const xhr = new XMLHttpRequest();
+      const xhr = new XMLHttpRequest();
 
-          xhr.upload.addEventListener('progress', (event) => {
-            if (event.lengthComputable && onProgress) {
-              const percentComplete = (event.loaded / event.total) * 100;
-              onProgress(percentComplete);
-            }
-          });
+      xhr.upload.addEventListener('progress', (evt) => {
+        if (evt.lengthComputable && onProgress) {
+          onProgress((evt.loaded / evt.total) * 100);
+        }
+      });
 
-          xhr.addEventListener('load', async () => {
-            if (xhr.status === 200) {
-              try {
-                let responseUrl: string;
-                
-                if (service.name === 'file.io') {
-                  const result = JSON.parse(xhr.responseText);
-                  if (!result.success) {
-                    throw new Error(`file.io error: ${result.message}`);
-                  }
-                  responseUrl = result.link;
-                } else {
-                  responseUrl = xhr.responseText.trim();
-                }
-                
-                console.log(`Successfully uploaded to ${service.name}: ${responseUrl}`);
-                resolve(responseUrl);
-              } catch (e) {
-                reject(new Error(`Invalid response from ${service.name}: ${e}`));
-              }
-            } else {
-              reject(new Error(`${service.name} upload failed with status ${xhr.status}`));
-            }
-          });
+      xhr.addEventListener('load', () => {
+        try {
+          const status = xhr.status;
+          const text = xhr.responseText || '';
+          let json: any = {};
+          
+          try {
+            json = JSON.parse(text);
+          } catch {
+            return reject(new Error(`Bad JSON from catbox-upload: ${text.slice(0, 120)}`));
+          }
+          
+          if (status >= 200 && status < 300 && json?.url) {
+            resolve(json.url as string);
+          } else {
+            reject(new Error(json?.error || `catbox-upload failed (${status})`));
+          }
+        } catch (e: any) {
+          reject(new Error(e?.message || 'Upload failed'));
+        }
+      });
 
-          xhr.addEventListener('error', () => {
-            reject(new Error(`Network error during ${service.name} upload`));
-          });
+      xhr.addEventListener('error', () => {
+        reject(new Error('Network error to catbox-upload'));
+      });
 
-          xhr.open('POST', service.url);
-          xhr.send(formData);
-        });
-
-        return url;
-        
-      } catch (error) {
-        console.error(`${service.name} failed:`, error);
-        // Continue to next service
-      }
-    }
-    
-    throw new Error('All upload services failed');
+      xhr.open('POST', endpoint);
+      xhr.send(formData);
+    });
   };
 
   const uploadFile = async (uploadFile: UploadFile) => {
@@ -260,18 +232,22 @@ export default function MultiFileUpload() {
       let videoUrl: string;
       
       if (isLargeFile || wouldExceedBucket) {
-        // Upload to external file hosting services directly from browser
-        console.log('Uploading to external file hosting...', { 
+        // Upload to Catbox via edge function with accurate progress
+        console.log('Uploading to Catbox via edge function...', { 
           fileSize: uploadFile.file.size, 
           currentBucketSize, 
           wouldExceed: wouldExceedBucket 
         });
         
-        videoUrl = await uploadToCatbox(uploadFile.file, (progress) => {
-          updateFile(uploadFile.id, { progress: 20 + (progress * 0.6) }); // 60% of progress for upload
+        videoUrl = await uploadLargeViaEdge(uploadFile.file, (progress) => {
+          // Map 0–100 upload progress into 20–90 UI progress
+          const mapped = 20 + (progress * 0.7);
+          updateFile(uploadFile.id, { progress: Math.min(90, Math.round(mapped)) });
         });
         
-        console.log('File uploaded to external host:', videoUrl);
+        // Small smoothing bump to show "processing"
+        updateFile(uploadFile.id, { progress: 95 });
+        console.log('File uploaded to Catbox:', videoUrl);
         
       } else {
         // Upload smaller files to Supabase as before

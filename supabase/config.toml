@@ -48,3 +48,6 @@ verify_jwt = false
 
 [functions.process-invite]
 verify_jwt = false
+
+[functions.catbox-upload]
+verify_jwt = false
