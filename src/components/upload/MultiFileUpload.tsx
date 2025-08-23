@@ -169,7 +169,8 @@ export default function MultiFileUpload() {
       const endpoint = 'https://yuqujmglvhnkgqflnlys.functions.supabase.co/catbox-upload';
 
       const formData = new FormData();
-      formData.append('file', file, file.name);
+      formData.append('reqtype', 'fileupload');
+      formData.append('fileToUpload', file, file.name);
 
       const xhr = new XMLHttpRequest();
 

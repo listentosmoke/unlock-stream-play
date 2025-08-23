@@ -21,28 +21,25 @@ serve(async (req) => {
   try {
     console.log("Received upload request - streaming mode");
     
-    // Parse FormData to get the file
-    const form = await req.formData();
-    const file = form.get("file") as File | null;
-    
-    if (!file) {
-      return new Response(JSON.stringify({ error: "file is required" }), {
+    // Get content type to ensure we have multipart data
+    const contentType = req.headers.get("content-type") || "";
+    if (!contentType.includes("multipart/form-data")) {
+      return new Response(JSON.stringify({ error: "multipart/form-data required" }), {
         status: 400,
         headers: { "Content-Type": "application/json", ...cors },
       });
     }
-
-    console.log(`Processing file: ${file.name}, size: ${file.size} bytes`);
     
-    // Create proper Catbox FormData
-    const catForm = new FormData();
-    catForm.append("reqtype", "fileupload");
-    catForm.append("fileToUpload", file, file.name);
+    console.log("Streaming directly to Catbox...");
     
-    console.log("Forwarding to Catbox...");
+    // Stream the request body directly to Catbox without parsing
+    // This avoids loading the entire file into memory
     const catRes = await fetch("https://catbox.moe/user/api.php", {
       method: "POST",
-      body: catForm,
+      body: req.body,
+      headers: {
+        "Content-Type": contentType,
+      },
     });
 
     const text = (await catRes.text()).trim();
