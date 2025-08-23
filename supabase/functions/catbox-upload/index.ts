@@ -18,37 +18,18 @@ serve(async (req) => {
     });
   }
 
-  const contentType = req.headers.get("content-type") || "";
-  if (!contentType.includes("multipart/form-data")) {
-    return new Response(JSON.stringify({ error: "multipart/form-data required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json", ...cors },
-    });
-  }
-
   try {
-    console.log("Received upload request");
-    const form = await req.formData();
-    const file = form.get("file") as File | null;
+    console.log("Received upload request - streaming mode");
     
-    if (!file) {
-      return new Response(JSON.stringify({ error: "file is required" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json", ...cors },
-      });
-    }
-
-    console.log(`Uploading file: ${file.name}, size: ${file.size} bytes`);
-
-    // Forward to Catbox
-    const catForm = new FormData();
-    catForm.append("reqtype", "fileupload");
-    catForm.append("fileToUpload", file, file.name);
-
-    console.log("Forwarding to Catbox...");
+    // Stream the request body directly to Catbox without parsing FormData
+    // This avoids loading the entire file into memory
+    console.log("Forwarding stream to Catbox...");
     const catRes = await fetch("https://catbox.moe/user/api.php", {
       method: "POST",
-      body: catForm,
+      body: req.body,
+      headers: {
+        "Content-Type": req.headers.get("content-type") || "",
+      },
     });
 
     const text = (await catRes.text()).trim();
