@@ -162,7 +162,7 @@ export default function MultiFileUpload() {
     }
   };
 
-  // Upload large file to Catbox via edge function with XHR progress
+  // Upload file via edge function with XHR progress (hybrid R2/Catbox routing)
   const uploadLargeViaEdge = (file: File, onProgress?: (progress: number) => void): Promise<string> => {
     return new Promise((resolve, reject) => {
       // Use the hardcoded Supabase URL to construct functions URL

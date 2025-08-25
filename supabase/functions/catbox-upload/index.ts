@@ -138,10 +138,10 @@ async function uploadToR2Multipart(file: File) {
 }
 
 // Generate AWS signature v4
-async function generateSignature(stringToSign: string, dateKey: Uint8Array, regionName: string, serviceName: string) {
-  const kDate = await createHmac(dateKey, stringToSign.split('\n')[1]);
-  const kRegion = await createHmac(kDate, regionName);
-  const kService = await createHmac(kRegion, serviceName);
+async function generateSignature(stringToSign: string, secretKey: string, dateStamp: string, region: string, service: string) {
+  const kDate = await createHmac(new TextEncoder().encode(`AWS4${secretKey}`), dateStamp);
+  const kRegion = await createHmac(kDate, region);
+  const kService = await createHmac(kRegion, service);
   const kSigning = await createHmac(kService, 'aws4_request');
   return await createHmac(kSigning, stringToSign);
 }
@@ -210,7 +210,7 @@ async function createSignedRequest(method: string, url: string, body?: Uint8Arra
   ].join('\n');
   
   // Calculate signature
-  const signingKey = await generateSignature(stringToSign, new TextEncoder().encode(`AWS4${R2_SECRET_ACCESS_KEY}`), 'auto', 's3');
+  const signingKey = await generateSignature(stringToSign, R2_SECRET_ACCESS_KEY!, dateStamp, 'auto', 's3');
   const signatureHex = Array.from(signingKey).map(b => b.toString(16).padStart(2, '0')).join('');
   
   // Add authorization header
@@ -234,7 +234,7 @@ async function initiateMultipartUpload(endpoint: string, key: string): Promise<s
   }
   
   const xml = await response.text();
-  const uploadIdMatch = xml.match(<UploadId>([^<]+)</UploadId>);
+  const uploadIdMatch = xml.match(/<UploadId>([^<]+)<\/UploadId>/);
   
   if (!uploadIdMatch) {
     throw new Error('Could not extract upload ID from response');
