@@ -222,13 +222,6 @@ export type Database = {
             foreignKeyName: "transactions_video_id_fkey"
             columns: ["video_id"]
             isOneToOne: false
-            referencedRelation: "video_list"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
             referencedRelation: "videos"
             referencedColumns: ["id"]
           },
@@ -275,13 +268,6 @@ export type Database = {
           video_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "user_unlocks_video_id_fkey"
-            columns: ["video_id"]
-            isOneToOne: false
-            referencedRelation: "video_list"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "user_unlocks_video_id_fkey"
             columns: ["video_id"]
@@ -350,60 +336,7 @@ export type Database = {
       }
     }
     Views: {
-      video_list: {
-        Row: {
-          created_at: string | null
-          description: string | null
-          duration: number | null
-          id: string | null
-          preview_url: string | null
-          r2_object_key: string | null
-          reward_points: number | null
-          status: Database["public"]["Enums"]["video_status"] | null
-          thumbnail_url: string | null
-          title: string | null
-          unlock_cost: number | null
-          unlock_count: number | null
-          updated_at: string | null
-          uploader_id: string | null
-          view_count: number | null
-        }
-        Insert: {
-          created_at?: string | null
-          description?: string | null
-          duration?: number | null
-          id?: string | null
-          preview_url?: string | null
-          r2_object_key?: never
-          reward_points?: number | null
-          status?: Database["public"]["Enums"]["video_status"] | null
-          thumbnail_url?: string | null
-          title?: string | null
-          unlock_cost?: number | null
-          unlock_count?: number | null
-          updated_at?: string | null
-          uploader_id?: string | null
-          view_count?: number | null
-        }
-        Update: {
-          created_at?: string | null
-          description?: string | null
-          duration?: number | null
-          id?: string | null
-          preview_url?: string | null
-          r2_object_key?: never
-          reward_points?: number | null
-          status?: Database["public"]["Enums"]["video_status"] | null
-          thumbnail_url?: string | null
-          title?: string | null
-          unlock_cost?: number | null
-          unlock_count?: number | null
-          updated_at?: string | null
-          uploader_id?: string | null
-          view_count?: number | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       admin_delete_invite: {

@@ -162,53 +162,170 @@ export default function MultiFileUpload() {
     }
   };
 
-  // Upload file via R2 edge function with XHR progress
-  const uploadViaR2 = (file: File, onProgress?: (progress: number) => void): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      // Use the hardcoded Supabase URL to construct functions URL
-      const endpoint = 'https://yuqujmglvhnkgqflnlys.functions.supabase.co/r2-upload';
+  const uploadToR2 = async (uploadFile: UploadFile): Promise<{ url: string; objectKey: string }> => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const fileSize = uploadFile.file.size;
+    
+    if (fileSize < CHUNK_SIZE) {
+      // Simple upload for files < 5MB
+      return await simpleUpload(uploadFile);
+    } else {
+      // Multipart upload for files >= 5MB
+      return await multipartUpload(uploadFile);
+    }
+  };
 
-      const formData = new FormData();
-      formData.append('reqtype', 'fileupload');
-      formData.append('fileToUpload', file, file.name);
-
-      const xhr = new XMLHttpRequest();
-
-      xhr.upload.addEventListener('progress', (evt) => {
-        if (evt.lengthComputable && onProgress) {
-          onProgress((evt.loaded / evt.total) * 100);
+  const simpleUpload = async (uploadFile: UploadFile): Promise<{ url: string; objectKey: string }> => {
+    try {
+      // Get presigned URL for simple upload
+      const { data: presignData, error: presignError } = await supabase.functions.invoke('r2-presign', {
+        body: {
+          action: 'simple-upload',
+          fileName: uploadFile.file.name,
+          fileType: uploadFile.file.type,
+          fileSize: uploadFile.file.size
         }
       });
 
-      xhr.addEventListener('load', () => {
-        try {
-          const status = xhr.status;
-          const text = xhr.responseText || '';
-          let json: any = {};
-          
-          try {
-            json = JSON.parse(text);
-          } catch {
-            return reject(new Error(`Bad JSON from R2 upload: ${text.slice(0, 120)}`));
+      if (presignError) throw presignError;
+
+      // Upload directly to R2 using presigned URL
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 100);
+            updateFile(uploadFile.id, { progress: 20 + Math.round(percentComplete * 0.7) });
           }
-          
-          if (status >= 200 && status < 300 && json?.url) {
-            resolve(json.url as string);
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) {
+            resolve({
+              url: presignData.publicUrl,
+              objectKey: presignData.objectKey
+            });
           } else {
-            reject(new Error(json?.error || `R2 upload failed (${status})`));
+            reject(new Error(`Upload failed with status: ${xhr.status}`));
           }
-        } catch (e: any) {
-          reject(new Error(e?.message || 'Upload failed'));
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Network error during upload'));
+        });
+
+        xhr.open('PUT', presignData.presignedUrl);
+        xhr.setRequestHeader('Content-Type', uploadFile.file.type);
+        xhr.send(uploadFile.file);
+      });
+    } catch (error) {
+      throw new Error(`Simple upload failed: ${error.message}`);
+    }
+  };
+
+  const multipartUpload = async (uploadFile: UploadFile): Promise<{ url: string; objectKey: string }> => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
+    const file = uploadFile.file;
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    let initData: any = null;
+
+    try {
+      // 1. Initiate multipart upload
+      const { data: initResponse, error: initError } = await supabase.functions.invoke('r2-presign', {
+        body: {
+          action: 'initiate-multipart',
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size
         }
       });
 
-      xhr.addEventListener('error', () => {
-        reject(new Error('Network error to R2 upload'));
+      if (initError) throw initError;
+      initData = initResponse;
+
+      const { uploadId, objectKey } = initData;
+      const parts: Array<{ PartNumber: number; ETag: string }> = [];
+
+      // 2. Upload parts
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        const partNumber = i + 1;
+
+        // Get presigned URL for this part
+        const { data: partData, error: partError } = await supabase.functions.invoke('r2-presign', {
+          body: {
+            action: 'get-part-url',
+            objectKey,
+            uploadId,
+            partNumber
+          }
+        });
+
+        if (partError) throw partError;
+
+        // Upload the part
+        const partResponse = await fetch(partData.presignedUrl, {
+          method: 'PUT',
+          body: chunk
+        });
+
+        if (!partResponse.ok) {
+          throw new Error(`Failed to upload part ${partNumber}`);
+        }
+
+        const etag = partResponse.headers.get('ETag');
+        if (!etag) {
+          throw new Error(`No ETag received for part ${partNumber}`);
+        }
+
+        parts.push({
+          PartNumber: partNumber,
+          ETag: etag
+        });
+
+        // Update progress
+        const progress = Math.round(((i + 1) / totalChunks) * 100);
+        updateFile(uploadFile.id, { progress: 20 + Math.round(progress * 0.7) });
+      }
+
+      // 3. Complete multipart upload
+      const { data: completeData, error: completeError } = await supabase.functions.invoke('r2-presign', {
+        body: {
+          action: 'complete-multipart',
+          objectKey,
+          uploadId,
+          parts
+        }
       });
 
-      xhr.open('POST', endpoint);
-      xhr.send(formData);
-    });
+      if (completeError) throw completeError;
+
+      return {
+        url: completeData.publicUrl,
+        objectKey: completeData.objectKey
+      };
+
+    } catch (error) {
+      // Abort multipart upload on error - check if initData exists first
+      try {
+        if (initData?.uploadId) {
+          await supabase.functions.invoke('r2-presign', {
+            body: {
+              action: 'abort-multipart',
+              objectKey: uploadFile.file.name,
+              uploadId: initData.uploadId
+            }
+          });
+        }
+      } catch (abortError) {
+        console.error('Failed to abort multipart upload:', abortError);
+      }
+      
+      throw new Error(`Multipart upload failed: ${error.message}`);
+    }
   };
 
   const uploadFile = async (uploadFile: UploadFile) => {
@@ -221,22 +338,12 @@ export default function MultiFileUpload() {
       
       updateFile(uploadFile.id, { progress: 20 });
 
-      // Upload all files to R2 via edge function
-      console.log('Uploading to R2 via edge function...', { 
-        fileSize: uploadFile.file.size
-      });
-      
-      const videoUrl = await uploadViaR2(uploadFile.file, (progress) => {
-        // Map 0–100 upload progress into 20–90 UI progress
-        const mapped = 20 + (progress * 0.7);
-        updateFile(uploadFile.id, { progress: Math.min(90, Math.round(mapped)) });
-      });
-      
-      // Small smoothing bump to show "processing"
-      updateFile(uploadFile.id, { progress: 95 });
-      console.log('File uploaded to R2:', videoUrl);
+      // Upload to R2 and get the URL and object key
+      console.log('Uploading to R2 via presigned URLs...', { fileSize: uploadFile.file.size });
+      const { url: videoUrl, objectKey } = await uploadToR2(uploadFile);
+      console.log('R2 upload successful:', videoUrl);
 
-      updateFile(uploadFile.id, { progress: 85 });
+      updateFile(uploadFile.id, { progress: 90 });
 
       // Upload thumbnail to Supabase (always use Supabase for thumbnails)
       const thumbnailFileName = `thumbnails/${user.id}/${Date.now()}-${uploadFile.id}-thumbnail.jpg`;
@@ -259,29 +366,33 @@ export default function MultiFileUpload() {
 
       updateFile(uploadFile.id, { progress: 95 });
 
-      // Insert video record with proper error handling
-      const videoData = {
-        uploader_id: user.id,
-        title: uploadFile.title.trim(),
-        description: uploadFile.description?.trim() || null,
-        full_video_url: videoUrl,
-        thumbnail_url: thumbnailUrl,
-        unlock_cost: 10,
-        reward_points: 5,
-        status: 'pending' as const
-      };
-
-      const { error: insertError } = await supabase
+      // Store video metadata in Supabase with R2 object key instead of direct URL
+      console.log('Storing video metadata...');
+      const { error: dbError } = await supabase
         .from('videos')
-        .insert(videoData);
+        .insert({
+          title: uploadFile.title.trim(),
+          description: uploadFile.description?.trim() || null,
+          r2_object_key: objectKey, // Store secure object key
+          thumbnail_url: thumbnailUrl,
+          uploader_id: user?.id,
+          status: 'pending',
+          unlock_cost: 10,
+          reward_points: 5
+        });
 
-      if (insertError) {
-        console.error('Database insert error:', insertError);
-        throw new Error('Failed to save video information');
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw new Error('Failed to save video metadata');
       }
 
-      updateFile(uploadFile.id, { status: 'completed', progress: 100 });
-      
+      updateFile(uploadFile.id, { 
+        status: 'completed',
+        progress: 100
+      });
+
+      console.log('Upload completed successfully');
+
     } catch (error: any) {
       console.error('Upload file error:', error);
       updateFile(uploadFile.id, { 

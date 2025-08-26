@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { Play, Lock, Coins, Eye } from 'lucide-react';
+import { SecureVideoPlayer } from './SecureVideoPlayer';
 
 interface VideoPlayerProps {
   video: any;
@@ -159,16 +160,8 @@ export function VideoPlayer({ video, onUnlock }: VideoPlayerProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {isUnlocked && video.full_video_url ? (
-          <div className="aspect-video">
-            <video 
-              src={video.full_video_url} 
-              controls 
-              className="w-full h-full rounded border"
-            >
-              Your browser does not support the video tag.
-            </video>
-          </div>
+        {isUnlocked ? (
+          <SecureVideoPlayer video={video} />
         ) : (
           <div className="aspect-video bg-muted rounded border flex items-center justify-center">
             <div className="text-center">
