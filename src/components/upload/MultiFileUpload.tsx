@@ -162,11 +162,11 @@ export default function MultiFileUpload() {
     }
   };
 
-  // Upload file via edge function with XHR progress (hybrid R2/Catbox routing)
-  const uploadLargeViaEdge = (file: File, onProgress?: (progress: number) => void): Promise<string> => {
+  // Upload file via R2 edge function with XHR progress
+  const uploadViaR2 = (file: File, onProgress?: (progress: number) => void): Promise<string> => {
     return new Promise((resolve, reject) => {
       // Use the hardcoded Supabase URL to construct functions URL
-      const endpoint = 'https://yuqujmglvhnkgqflnlys.functions.supabase.co/catbox-upload';
+      const endpoint = 'https://yuqujmglvhnkgqflnlys.functions.supabase.co/r2-upload';
 
       const formData = new FormData();
       formData.append('reqtype', 'fileupload');
@@ -189,13 +189,13 @@ export default function MultiFileUpload() {
           try {
             json = JSON.parse(text);
           } catch {
-            return reject(new Error(`Bad JSON from catbox-upload: ${text.slice(0, 120)}`));
+            return reject(new Error(`Bad JSON from R2 upload: ${text.slice(0, 120)}`));
           }
           
           if (status >= 200 && status < 300 && json?.url) {
             resolve(json.url as string);
           } else {
-            reject(new Error(json?.error || `catbox-upload failed (${status})`));
+            reject(new Error(json?.error || `R2 upload failed (${status})`));
           }
         } catch (e: any) {
           reject(new Error(e?.message || 'Upload failed'));
@@ -203,7 +203,7 @@ export default function MultiFileUpload() {
       });
 
       xhr.addEventListener('error', () => {
-        reject(new Error('Network error to catbox-upload'));
+        reject(new Error('Network error to R2 upload'));
       });
 
       xhr.open('POST', endpoint);
@@ -221,62 +221,20 @@ export default function MultiFileUpload() {
       
       updateFile(uploadFile.id, { progress: 20 });
 
-      // Check file size and bucket size
-      const maxSupabaseSize = 100 * 1024 * 1024; // 100MB
-      const maxBucketSize = 45 * 1024 * 1024; // 45MB
-      const isLargeFile = uploadFile.file.size > maxSupabaseSize;
+      // Upload all files to R2 via edge function
+      console.log('Uploading to R2 via edge function...', { 
+        fileSize: uploadFile.file.size
+      });
       
-      // Check current bucket size
-      const currentBucketSize = await checkBucketSize();
-      const wouldExceedBucket = (currentBucketSize + uploadFile.file.size) > maxBucketSize;
+      const videoUrl = await uploadViaR2(uploadFile.file, (progress) => {
+        // Map 0–100 upload progress into 20–90 UI progress
+        const mapped = 20 + (progress * 0.7);
+        updateFile(uploadFile.id, { progress: Math.min(90, Math.round(mapped)) });
+      });
       
-      let videoUrl: string;
-      
-      if (isLargeFile || wouldExceedBucket) {
-        // Upload to Catbox via edge function with accurate progress
-        console.log('Uploading to Catbox via edge function...', { 
-          fileSize: uploadFile.file.size, 
-          currentBucketSize, 
-          wouldExceed: wouldExceedBucket 
-        });
-        
-        videoUrl = await uploadLargeViaEdge(uploadFile.file, (progress) => {
-          // Map 0–100 upload progress into 20–90 UI progress
-          const mapped = 20 + (progress * 0.7);
-          updateFile(uploadFile.id, { progress: Math.min(90, Math.round(mapped)) });
-        });
-        
-        // Small smoothing bump to show "processing"
-        updateFile(uploadFile.id, { progress: 95 });
-        console.log('File uploaded to Catbox:', videoUrl);
-        
-      } else {
-        // Upload smaller files to Supabase as before
-        const fileExt = uploadFile.file.name.split('.').pop();
-        const fileName = `${user.id}/${Date.now()}-${uploadFile.id}.${fileExt}`;
-        
-        // Upload to Supabase with progress tracking
-        const { error: uploadError } = await supabase.storage
-          .from('videos')
-          .upload(fileName, uploadFile.file, {
-            cacheControl: '3600',
-            upsert: false
-          });
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError);
-          throw new Error(uploadError.message || 'Failed to upload video');
-        }
-
-        updateFile(uploadFile.id, { progress: 80 });
-        
-        // Get public URL from Supabase
-        const { data: { publicUrl } } = supabase.storage
-          .from('videos')
-          .getPublicUrl(fileName);
-        
-        videoUrl = publicUrl;
-      }
+      // Small smoothing bump to show "processing"
+      updateFile(uploadFile.id, { progress: 95 });
+      console.log('File uploaded to R2:', videoUrl);
 
       updateFile(uploadFile.id, { progress: 85 });
 
@@ -429,7 +387,7 @@ export default function MultiFileUpload() {
                   Drop video files here or click to browse
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Supports MP4, MOV, AVI, MKV • Large files supported
+                  Supports MP4, MOV, AVI, MKV • Unlimited file sizes via R2
                 </p>
               </div>
             </CardContent>

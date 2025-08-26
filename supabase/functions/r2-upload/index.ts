@@ -13,8 +13,8 @@ const R2_SECRET_ACCESS_KEY = Deno.env.get('R2_SECRET_ACCESS_KEY');
 const R2_BUCKET_NAME = Deno.env.get('R2_BUCKET_NAME');
 const R2_ACCOUNT_ID = Deno.env.get('R2_ACCOUNT_ID');
 
-// Large file threshold (100MB)
-const LARGE_FILE_THRESHOLD = 100 * 1024 * 1024;
+// Multipart upload threshold (5MB - smaller than before for better performance)
+const MULTIPART_THRESHOLD = 5 * 1024 * 1024;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -29,7 +29,11 @@ serve(async (req) => {
   }
 
   try {
-    console.log("Received upload request");
+    console.log("Received R2 upload request");
+    
+    if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_ACCOUNT_ID) {
+      throw new Error("R2 credentials not configured");
+    }
     
     // Parse FormData to get file information
     const form = await req.formData();
@@ -44,16 +48,16 @@ serve(async (req) => {
 
     console.log(`Processing file: ${file.name}, size: ${file.size} bytes`);
 
-    // Determine upload method based on file size
-    if (file.size > LARGE_FILE_THRESHOLD) {
+    // Route based on file size
+    if (file.size > MULTIPART_THRESHOLD) {
       console.log("Large file detected, using R2 multipart upload");
       return await uploadToR2Multipart(file);
     } else {
-      console.log("Small file, using Catbox");
-      return await uploadToCatbox(form);
+      console.log("Small file, using R2 simple upload");
+      return await uploadToR2Simple(file);
     }
   } catch (e) {
-    console.error("Upload error:", e);
+    console.error("R2 upload error:", e);
     return new Response(JSON.stringify({ error: e?.message ?? "Unexpected error" }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...cors },
@@ -61,42 +65,50 @@ serve(async (req) => {
   }
 });
 
-// Upload to Catbox for smaller files
-async function uploadToCatbox(formData: FormData) {
+// Simple R2 upload for smaller files
+async function uploadToR2Simple(file: File) {
   try {
-    const catRes = await fetch("https://catbox.moe/user/api.php", {
-      method: "POST",
-      body: formData,
+    const fileName = `videos/${crypto.randomUUID()}-${file.name}`;
+    const r2Endpoint = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+    const url = `${r2Endpoint}/${R2_BUCKET_NAME}/${fileName}`;
+    
+    const body = new Uint8Array(await file.arrayBuffer());
+    const headers = await createSignedRequest('PUT', url, body, {
+      'content-type': file.type || 'application/octet-stream'
     });
-
-    const text = (await catRes.text()).trim();
-    console.log(`Catbox response: ${catRes.status}, body: ${text}`);
-
-    if (!catRes.ok || !text.startsWith("http")) {
-      console.error(`Catbox upload failed: ${text}`);
-      return new Response(JSON.stringify({ error: text || "Catbox upload failed" }), {
-        status: 502,
-        headers: { "Content-Type": "application/json", ...cors },
-      });
+    
+    console.log(`Uploading to R2: ${fileName}`);
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`R2 upload failed: ${error}`);
     }
-
-    console.log(`Catbox upload successful: ${text}`);
-    return new Response(JSON.stringify({ url: text }), {
+    
+    const finalUrl = url;
+    console.log(`R2 upload successful: ${finalUrl}`);
+    
+    return new Response(JSON.stringify({ url: finalUrl }), {
       headers: { "Content-Type": "application/json", ...cors },
     });
+    
   } catch (error) {
-    console.error("Catbox upload error:", error);
-    throw error;
+    console.error("R2 simple upload error:", error);
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...cors },
+    });
   }
 }
 
-// Upload to R2 using multipart upload for large files
+// R2 multipart upload for large files
 async function uploadToR2Multipart(file: File) {
   try {
-    if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME || !R2_ACCOUNT_ID) {
-      throw new Error("R2 credentials not configured");
-    }
-
     const fileName = `videos/${crypto.randomUUID()}-${file.name}`;
     const r2Endpoint = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
     
@@ -122,14 +134,14 @@ async function uploadToR2Multipart(file: File) {
     
     // Complete multipart upload
     const finalUrl = await completeMultipartUpload(r2Endpoint, fileName, uploadId, parts);
-    console.log(`R2 upload completed: ${finalUrl}`);
+    console.log(`R2 multipart upload completed: ${finalUrl}`);
     
     return new Response(JSON.stringify({ url: finalUrl }), {
       headers: { "Content-Type": "application/json", ...cors },
     });
     
   } catch (error) {
-    console.error("R2 upload error:", error);
+    console.error("R2 multipart upload error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...cors },
