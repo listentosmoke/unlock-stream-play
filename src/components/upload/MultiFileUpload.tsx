@@ -231,7 +231,16 @@ export default function MultiFileUpload() {
     let initData: any = null;
 
     try {
+      console.log('=== MULTIPART UPLOAD START ===');
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        totalChunks
+      });
+
       // 1. Initiate multipart upload
+      console.log('Initiating multipart upload...');
       const { data: initResponse, error: initError } = await supabase.functions.invoke('r2-presign', {
         body: {
           action: 'initiate-multipart',
@@ -241,10 +250,26 @@ export default function MultiFileUpload() {
         }
       });
 
-      if (initError) throw initError;
-      initData = initResponse;
+      console.log('Initiate response:', { initResponse, initError });
 
+      if (initError) {
+        console.error('Initiate error details:', initError);
+        throw new Error(`Failed to initiate multipart upload: ${initError.message || JSON.stringify(initError)}`);
+      }
+      
+      if (!initResponse) {
+        throw new Error('No response received from initiate-multipart');
+      }
+
+      initData = initResponse;
       const { uploadId, objectKey } = initData;
+      
+      if (!uploadId || !objectKey) {
+        console.error('Invalid initiate response:', initData);
+        throw new Error('Invalid response from initiate-multipart: missing uploadId or objectKey');
+      }
+
+      console.log('Multipart upload initiated successfully:', { uploadId, objectKey });
       const parts: Array<{ PartNumber: number; ETag: string }> = [];
 
       // 2. Upload parts
@@ -308,7 +333,15 @@ export default function MultiFileUpload() {
         objectKey: completeData.objectKey
       };
 
-    } catch (error) {
+    } catch (error: any) {
+      console.error('=== MULTIPART UPLOAD ERROR ===');
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        initData
+      });
+      
       // Abort multipart upload on error - check if initData exists first
       try {
         if (initData?.uploadId && initData?.objectKey) {

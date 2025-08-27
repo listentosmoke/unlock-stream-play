@@ -64,6 +64,16 @@ serve(async (req) => {
       }
 
       case 'initiate-multipart': {
+        console.log('=== MULTIPART UPLOAD INITIATION ===');
+        console.log('Request details:', {
+          fileName,
+          fileType,
+          fileSize,
+          objectKey,
+          endpoint,
+          bucketName
+        });
+
         // Initiate multipart upload
         const initiateUrl = await createPresignedUrl(
           endpoint, 
@@ -76,6 +86,8 @@ serve(async (req) => {
           { uploads: '' }
         )
 
+        console.log('Generated initiate URL:', initiateUrl);
+
         const response = await fetch(initiateUrl, {
           method: 'POST',
           headers: {
@@ -83,14 +95,22 @@ serve(async (req) => {
           }
         })
 
+        console.log('Initiate response status:', response.status, response.statusText);
+        console.log('Initiate response headers:', Object.fromEntries(response.headers.entries()));
+
         if (!response.ok) {
           const errorText = await response.text()
-          console.error('Multipart initiate failed:', response.status, errorText)
-          throw new Error(`Failed to initiate multipart upload: ${response.status} ${response.statusText}`)
+          console.error('Multipart initiate failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorBody: errorText,
+            url: initiateUrl
+          });
+          throw new Error(`Failed to initiate multipart upload: ${response.status} ${response.statusText} - ${errorText}`)
         }
 
         const xmlText = await response.text()
-        console.log('Initiate multipart response:', xmlText)
+        console.log('Initiate multipart XML response:', xmlText)
         
         const uploadIdMatch = xmlText.match(/<UploadId>([^<]+)<\/UploadId>/)
         const extractedUploadId = uploadIdMatch ? uploadIdMatch[1] : null
@@ -99,6 +119,8 @@ serve(async (req) => {
           console.error('No UploadId found in response:', xmlText)
           throw new Error('Failed to parse upload ID from multipart initiate response')
         }
+
+        console.log('Successfully extracted uploadId:', extractedUploadId);
 
         return new Response(JSON.stringify({
           uploadId: extractedUploadId,
@@ -201,7 +223,18 @@ serve(async (req) => {
         })
     }
   } catch (error) {
-    console.error('R2 presign error:', error)
+    console.error('=== R2 PRESIGN ERROR ===');
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    console.error('Request context:', {
+      method: req.method,
+      headers: Object.fromEntries(req.headers.entries()),
+      url: req.url
+    });
+    
     return new Response(`Error: ${error.message}`, { 
       status: 500, 
       headers: corsHeaders 
@@ -219,6 +252,16 @@ async function createPresignedUrl(
   contentType?: string | null,
   queryParams?: Record<string, string>
 ): Promise<string> {
+  console.log('=== CREATING PRESIGNED URL ===');
+  console.log('Input parameters:', {
+    endpoint,
+    bucketName,
+    objectKey,
+    method,
+    contentType,
+    queryParams
+  });
+
   const region = 'auto'
   const service = 's3'
   const algorithm = 'AWS4-HMAC-SHA256'
@@ -231,6 +274,13 @@ async function createPresignedUrl(
   // Use path-style addressing for better compatibility
   const host = endpoint.replace('https://', '')
   const canonicalUri = `/${bucketName}/${objectKey}`
+  
+  console.log('URL components:', {
+    host,
+    canonicalUri,
+    amzDate,
+    dateStamp
+  });
   
   // Build query string
   const queryString = new URLSearchParams({
@@ -256,6 +306,15 @@ async function createPresignedUrl(
     payloadHash
   ].join('\n')
 
+  console.log('Canonical request parts:', {
+    method,
+    canonicalUri,
+    queryString: queryString.substring(0, 100) + '...',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
+  });
+
   // Create string to sign
   const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
   const stringToSign = [
@@ -271,7 +330,10 @@ async function createPresignedUrl(
 
   // Build final URL
   const finalQueryString = `${queryString}&X-Amz-Signature=${signature}`
-  return `https://${host}${canonicalUri}?${finalQueryString}`
+  const finalUrl = `https://${host}${canonicalUri}?${finalQueryString}`
+  
+  console.log('Generated presigned URL:', finalUrl.substring(0, 100) + '...');
+  return finalUrl
 }
 
 async function sha256(message: string): Promise<string> {
