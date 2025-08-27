@@ -311,11 +311,12 @@ export default function MultiFileUpload() {
     } catch (error) {
       // Abort multipart upload on error - check if initData exists first
       try {
-        if (initData?.uploadId) {
+        if (initData?.uploadId && initData?.objectKey) {
+          console.log('Aborting multipart upload:', { objectKey: initData.objectKey, uploadId: initData.uploadId });
           await supabase.functions.invoke('r2-presign', {
             body: {
               action: 'abort-multipart',
-              objectKey: uploadFile.file.name,
+              objectKey: initData.objectKey,
               uploadId: initData.uploadId
             }
           });

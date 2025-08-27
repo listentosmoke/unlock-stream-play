@@ -20,7 +20,7 @@ serve(async (req) => {
   }
 
   try {
-    const { action, fileName, fileType, fileSize, uploadId, partNumber, parts } = await req.json()
+    const { action, fileName, fileType, fileSize, uploadId, partNumber, parts, objectKey: clientObjectKey } = await req.json()
 
     const accountId = Deno.env.get('R2_ACCOUNT_ID')
     const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID')
@@ -28,6 +28,7 @@ serve(async (req) => {
     const bucketName = Deno.env.get('R2_BUCKET_NAME')
 
     if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
+      console.error('R2 credentials missing:', { accountId: !!accountId, accessKeyId: !!accessKeyId, secretAccessKey: !!secretAccessKey, bucketName: !!bucketName })
       return new Response('R2 credentials not configured', { 
         status: 500, 
         headers: corsHeaders 
@@ -35,7 +36,10 @@ serve(async (req) => {
     }
 
     const endpoint = `https://${accountId}.r2.cloudflarestorage.com`
-    const objectKey = `${Date.now()}-${fileName}`
+    // Use client-provided objectKey for operations that need it, generate new one for initial uploads
+    const objectKey = clientObjectKey || `${Date.now()}-${fileName}`
+    
+    console.log('R2 presign request:', { action, fileName, objectKey, fileSize })
 
     switch (action) {
       case 'simple-upload': {
@@ -79,12 +83,21 @@ serve(async (req) => {
           }
         })
 
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Multipart initiate failed:', response.status, errorText)
+          throw new Error(`Failed to initiate multipart upload: ${response.status} ${response.statusText}`)
+        }
+
         const xmlText = await response.text()
+        console.log('Initiate multipart response:', xmlText)
+        
         const uploadIdMatch = xmlText.match(/<UploadId>([^<]+)<\/UploadId>/)
         const extractedUploadId = uploadIdMatch ? uploadIdMatch[1] : null
 
         if (!extractedUploadId) {
-          throw new Error('Failed to initiate multipart upload')
+          console.error('No UploadId found in response:', xmlText)
+          throw new Error('Failed to parse upload ID from multipart initiate response')
         }
 
         return new Response(JSON.stringify({
@@ -146,7 +159,9 @@ serve(async (req) => {
         })
 
         if (!response.ok) {
-          throw new Error(`Failed to complete multipart upload: ${response.statusText}`)
+          const errorText = await response.text()
+          console.error('Complete multipart failed:', response.status, errorText)
+          throw new Error(`Failed to complete multipart upload: ${response.status} ${response.statusText}`)
         }
 
         return new Response(JSON.stringify({
@@ -213,8 +228,9 @@ async function createPresignedUrl(
   const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '')
   const dateStamp = amzDate.slice(0, 8)
 
-  const host = `${bucketName}.${endpoint.replace('https://', '')}`
-  const canonicalUri = `/${objectKey}`
+  // Use path-style addressing for better compatibility
+  const host = endpoint.replace('https://', '')
+  const canonicalUri = `/${bucketName}/${objectKey}`
   
   // Build query string
   const queryString = new URLSearchParams({

@@ -166,8 +166,9 @@ async function createSignedUrl(
   const dateStamp = amzDate.slice(0, 8)
 
   const endpoint = `https://${accountId}.r2.cloudflarestorage.com`
-  const host = `${bucketName}.${endpoint.replace('https://', '')}`
-  const canonicalUri = `/${objectKey}`
+  // Use path-style addressing for better compatibility
+  const host = endpoint.replace('https://', '')
+  const canonicalUri = `/${bucketName}/${objectKey}`
   
   // Build query string
   const queryString = new URLSearchParams({
