@@ -1,299 +1,406 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-const DEBUG = (Deno.env.get('DEBUG_SIGV4') || '').toLowerCase() === 'true';
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
-};
-serve(async (req)=>{
-  if (req.method === 'OPTIONS') return new Response(null, {
-    headers: corsHeaders
-  });
-  if (req.method !== 'POST') return new Response('Method not allowed', {
-    status: 405,
-    headers: corsHeaders
-  });
+}
+
+serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders })
+  }
+
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { 
+      status: 405, 
+      headers: corsHeaders 
+    })
+  }
+
   try {
-    const body = await req.json().catch(()=>({}));
-    const { action, fileName, fileType, fileSize, uploadId, partNumber, parts, objectKey: clientObjectKey } = body;
-    // Load R2 credentials
-    const accountId = (Deno.env.get('R2_ACCOUNT_ID') || '').trim();
-    const accessKeyId = (Deno.env.get('R2_ACCESS_KEY_ID') || '').trim();
-    const secretAccessKey = (Deno.env.get('R2_SECRET_ACCESS_KEY') || '').trim();
-    const bucketName = (Deno.env.get('R2_BUCKET_NAME') || '').trim();
+    const { action, fileName, fileType, fileSize, uploadId, partNumber, parts, objectKey: clientObjectKey } = await req.json()
+
+    const accountId = Deno.env.get('R2_ACCOUNT_ID')
+    const accessKeyId = Deno.env.get('R2_ACCESS_KEY_ID')
+    const secretAccessKey = Deno.env.get('R2_SECRET_ACCESS_KEY')
+    const bucketName = Deno.env.get('R2_BUCKET_NAME')
+
     if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-      console.error('Missing R2 credentials');
-      return new Response('R2 credentials not configured', {
-        status: 500,
-        headers: corsHeaders
-      });
+      console.error('R2 credentials missing:', { accountId: !!accountId, accessKeyId: !!accessKeyId, secretAccessKey: !!secretAccessKey, bucketName: !!bucketName })
+      return new Response('R2 credentials not configured', { 
+        status: 500, 
+        headers: corsHeaders 
+      })
     }
-    const endpoint = `https://${bucketName}.${accountId}.r2.cloudflarestorage.com`;
-    const objectKey = clientObjectKey || `${Date.now()}-${fileName || 'file'}`;
-    switch(action){
-      case 'simple-upload':
-        {
-          const presignedUrl = await createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, 'PUT', {});
-          return json({
-            presignedUrl,
-            objectKey,
-            publicUrl: `${endpoint}/${objectKey}`
-          });
-        }
-      case 'initiate-multipart':
-        {
-          // Create presigned URL with ?uploads= (empty string → uploads=)
-          const url = await createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, 'POST', {
-            uploads: ''
-          });
-          // Set Content-Type header to persist metadata
-          const headers = {};
-          if (fileType) headers['Content-Type'] = fileType;
-          const res = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: ''
-          });
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`Failed to initiate multipart upload: ${res.status} ${res.statusText} - ${errorText}`);
+
+    const endpoint = `https://${accountId}.r2.cloudflarestorage.com`
+    // Use client-provided objectKey for operations that need it, generate new one for initial uploads
+    const objectKey = clientObjectKey || `${Date.now()}-${fileName}`
+    
+    console.log('R2 presign request:', { action, fileName, objectKey, fileSize })
+
+    switch (action) {
+      case 'simple-upload': {
+        // Generate presigned URL for simple PUT upload
+        const presignedUrl = await createPresignedUrl(
+          endpoint, 
+          bucketName, 
+          objectKey, 
+          accessKeyId, 
+          secretAccessKey,
+          'PUT',
+          fileType
+        )
+        
+        return new Response(JSON.stringify({
+          presignedUrl,
+          objectKey,
+          publicUrl: `${endpoint}/${bucketName}/${objectKey}`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      case 'initiate-multipart': {
+        console.log('=== MULTIPART UPLOAD INITIATION ===');
+        console.log('Request details:', {
+          fileName,
+          fileType,
+          fileSize,
+          objectKey,
+          endpoint,
+          bucketName
+        });
+
+        // Initiate multipart upload
+        const initiateUrl = await createPresignedUrl(
+          endpoint, 
+          bucketName, 
+          objectKey, 
+          accessKeyId, 
+          secretAccessKey,
+          'POST',
+          fileType,
+          { uploads: '' }
+        )
+
+        console.log('Generated initiate URL:', initiateUrl);
+
+        const response = await fetch(initiateUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': fileType
           }
-          const xml = await res.text();
-          const match = xml.match(/<UploadId>([^<]+)<\/UploadId>/);
-          if (!match) throw new Error('Failed to parse upload ID');
-          return json({
-            uploadId: match[1],
-            objectKey
+        })
+
+        console.log('Initiate response status:', response.status, response.statusText);
+        console.log('Initiate response headers:', Object.fromEntries(response.headers.entries()));
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Multipart initiate failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            errorBody: errorText,
+            url: initiateUrl
           });
+          throw new Error(`Failed to initiate multipart upload: ${response.status} ${response.statusText} - ${errorText}`)
         }
-      case 'get-part-url':
-        {
-          if (!uploadId || !partNumber) return bad('Missing uploadId or partNumber');
-          const url = await createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, 'PUT', {
-            partNumber: String(partNumber),
-            uploadId
-          });
-          return json({
-            presignedUrl: url
-          });
+
+        const xmlText = await response.text()
+        console.log('Initiate multipart XML response:', xmlText)
+        
+        const uploadIdMatch = xmlText.match(/<UploadId>([^<]+)<\/UploadId>/)
+        const extractedUploadId = uploadIdMatch ? uploadIdMatch[1] : null
+
+        if (!extractedUploadId) {
+          console.error('No UploadId found in response:', xmlText)
+          throw new Error('Failed to parse upload ID from multipart initiate response')
         }
-      case 'complete-multipart':
-        {
-          if (!uploadId || !Array.isArray(parts)) return bad('Missing uploadId or parts');
-          const url = await createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, 'POST', {
-            uploadId
-          });
-          const partsXml = parts.map((p)=>`<Part><PartNumber>${p.PartNumber}</PartNumber><ETag>${p.ETag}</ETag></Part>`).join('');
-          const completeXml = `<CompleteMultipartUpload>${partsXml}</CompleteMultipartUpload>`;
-          const res = await fetch(url, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/xml'
-            },
-            body: completeXml
-          });
-          if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`Failed to complete multipart upload: ${res.status} ${res.statusText} - ${errorText}`);
+
+        console.log('Successfully extracted uploadId:', extractedUploadId);
+
+        return new Response(JSON.stringify({
+          uploadId: extractedUploadId,
+          objectKey
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      case 'get-part-url': {
+        // Generate presigned URL for uploading a part
+        const partUrl = await createPresignedUrl(
+          endpoint, 
+          bucketName, 
+          objectKey, 
+          accessKeyId, 
+          secretAccessKey,
+          'PUT',
+          null,
+          { 
+            partNumber: partNumber.toString(),
+            uploadId 
           }
-          return json({
-            publicUrl: `${endpoint}/${objectKey}`,
-            objectKey
-          });
+        )
+
+        return new Response(JSON.stringify({
+          presignedUrl: partUrl
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      case 'complete-multipart': {
+        // Complete multipart upload
+        const completeUrl = await createPresignedUrl(
+          endpoint, 
+          bucketName, 
+          objectKey, 
+          accessKeyId, 
+          secretAccessKey,
+          'POST',
+          null,
+          { uploadId }
+        )
+
+        const partsXml = parts.map((part: any) => 
+          `<Part><PartNumber>${part.PartNumber}</PartNumber><ETag>${part.ETag}</ETag></Part>`
+        ).join('')
+        
+        const completeXml = `<CompleteMultipartUpload>${partsXml}</CompleteMultipartUpload>`
+
+        const response = await fetch(completeUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/xml'
+          },
+          body: completeXml
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('Complete multipart failed:', response.status, errorText)
+          throw new Error(`Failed to complete multipart upload: ${response.status} ${response.statusText}`)
         }
-      case 'abort-multipart':
-        {
-          if (!uploadId) return bad('Missing uploadId');
-          const url = await createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, 'DELETE', {
-            uploadId
-          });
-          await fetch(url, {
-            method: 'DELETE'
-          });
-          return json({
-            success: true
-          });
-        }
-      case 'diagnose':
-        {
-          const url = await createPresignedUrl(endpoint, '', accessKeyId, secretAccessKey, 'GET', {
-            'list-type': '2',
-            'max-keys': '0'
-          });
-          const res = await fetch(url, {
-            method: 'GET'
-          });
-          const text = await res.text();
-          return json({
-            status: res.status,
-            statusText: res.statusText,
-            bodyPreview: text.slice(0, 400)
-          });
-        }
+
+        return new Response(JSON.stringify({
+          publicUrl: `${endpoint}/${bucketName}/${objectKey}`,
+          objectKey
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
+      case 'abort-multipart': {
+        // Abort multipart upload
+        const abortUrl = await createPresignedUrl(
+          endpoint, 
+          bucketName, 
+          objectKey, 
+          accessKeyId, 
+          secretAccessKey,
+          'DELETE',
+          null,
+          { uploadId }
+        )
+
+        await fetch(abortUrl, { method: 'DELETE' })
+
+        return new Response(JSON.stringify({
+          success: true
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
+
       default:
-        return bad('Invalid action');
+        return new Response('Invalid action', { 
+          status: 400, 
+          headers: corsHeaders 
+        })
     }
   } catch (error) {
-    console.error('Edge function error', {
+    console.error('=== R2 PRESIGN ERROR ===');
+    console.error('Error details:', {
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
+      name: error.name
     });
-    return new Response(`Error: ${error.message}`, {
-      status: 500,
-      headers: corsHeaders
+    console.error('Request context:', {
+      method: req.method,
+      headers: Object.fromEntries(req.headers.entries()),
+      url: req.url
     });
+    
+    return new Response(`Error: ${error.message}`, { 
+      status: 500, 
+      headers: corsHeaders 
+    })
   }
-});
-function json(obj) {
-  return new Response(JSON.stringify(obj), {
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
+})
+
+async function createPresignedUrl(
+  endpoint: string,
+  bucketName: string,
+  objectKey: string,
+  accessKeyId: string,
+  secretAccessKey: string,
+  method: string,
+  contentType?: string | null,
+  queryParams?: Record<string, string>
+): Promise<string> {
+  console.log('=== CREATING PRESIGNED URL ===');
+  console.log('Input parameters:', {
+    endpoint,
+    bucketName,
+    objectKey,
+    method,
+    contentType,
+    queryParams
   });
-}
-function bad(msg) {
-  return new Response(msg, {
-    status: 400,
-    headers: corsHeaders
+
+  const region = 'auto'
+  const service = 's3'
+  const algorithm = 'AWS4-HMAC-SHA256'
+  const expirationTime = 3600 // 1 hour
+
+  const now = new Date()
+  const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '')
+  const dateStamp = amzDate.slice(0, 8)
+
+  // Use path-style addressing for better compatibility
+  const host = endpoint.replace('https://', '')
+  const canonicalUri = `/${bucketName}/${objectKey}`
+  
+  console.log('URL components:', {
+    host,
+    canonicalUri,
+    amzDate,
+    dateStamp
   });
-}
-/* --------- Helper functions for signing --------- */ async function createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, method, queryParams = {}) {
-  const region = 'auto';
-  const service = 's3';
-  const algorithm = 'AWS4-HMAC-SHA256';
-  const expires = 3600;
-  const now = new Date();
-  const amzDate = toAmzDate(now);
-  const dateStamp = amzDate.slice(0, 8);
-  const host = endpoint.replace(/^https?:\/\//, '');
-  const canonicalUri = objectKey ? `/${encodePath(objectKey)}` : '/';
-  // Keep empty string values so uploads= appears with the equals sign
-  const pairs = [
-    [
-      'X-Amz-Algorithm',
-      algorithm
-    ],
-    [
-      'X-Amz-Credential',
-      `${accessKeyId}/${dateStamp}/${region}/${service}/aws4_request`
-    ],
-    [
-      'X-Amz-Date',
-      amzDate
-    ],
-    [
-      'X-Amz-Expires',
-      String(expires)
-    ],
-    [
-      'X-Amz-SignedHeaders',
-      'host'
-    ]
-  ];
-  for (const [k, v] of Object.entries(queryParams)){
-    pairs.push([
-      k,
-      v
-    ]);
-  }
-  const encoded = pairs.map(([k, v])=>[
-      encRfc3986(k),
-      v === null ? null : encRfc3986(v)
-    ]);
-  encoded.sort((a, b)=>{
-    if (a[0] === b[0]) {
-      if (a[1] === b[1]) return 0;
-      if (a[1] === null) return -1;
-      if (b[1] === null) return 1;
-      return a[1] < b[1] ? -1 : 1;
-    }
-    return a[0] < b[0] ? -1 : 1;
-  });
-  const canonicalQuery = encoded.map(([k, v])=>v === null ? k : `${k}=${v}`).join('&');
-  const canonicalHeaders = `host:${host}\n`;
-  const signedHeaders = 'host';
-  const payloadHash = 'UNSIGNED-PAYLOAD';
+  
+  // Build query string
+  const queryString = new URLSearchParams({
+    'X-Amz-Algorithm': algorithm,
+    'X-Amz-Credential': `${accessKeyId}/${dateStamp}/${region}/${service}/aws4_request`,
+    'X-Amz-Date': amzDate,
+    'X-Amz-Expires': expirationTime.toString(),
+    'X-Amz-SignedHeaders': 'host',
+    ...queryParams
+  }).toString()
+
+  // Create canonical request
+  const canonicalHeaders = `host:${host}\n`
+  const signedHeaders = 'host'
+  const payloadHash = 'UNSIGNED-PAYLOAD'
+
   const canonicalRequest = [
     method,
     canonicalUri,
-    canonicalQuery,
+    queryString,
     canonicalHeaders,
     signedHeaders,
     payloadHash
-  ].join('\n');
-  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+  ].join('\n')
+
+  console.log('Canonical request parts:', {
+    method,
+    canonicalUri,
+    queryString: queryString.substring(0, 100) + '...',
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash
+  });
+
+  // Create string to sign
+  const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`
   const stringToSign = [
     algorithm,
     amzDate,
     credentialScope,
-    await sha256Hex(canonicalRequest)
-  ].join('\n');
-  const signingKey = await getSignatureKey(secretAccessKey, dateStamp, region, service);
-  const signature = await hmacHex(signingKey, stringToSign);
-  const url = `https://${host}${canonicalUri}?${canonicalQuery}&X-Amz-Signature=${signature}`;
-  if (DEBUG) {
-    const afterQ = url.split('?')[1] || '';
-    console.log('SIGV4 DEBUG', {
-      method,
-      host,
-      canonicalUri,
-      canonicalQuery,
-      hasUploadsKeyOnly: /\buploads(&|$)/.test(afterQ),
-      containsUploadsEquals: /\buploads=(&|$)/.test(afterQ),
-      canonicalRequestHash: await sha256Hex(canonicalRequest),
-      stringToSignHash: await sha256Hex(stringToSign),
-      scope: credentialScope,
-      amzDate,
-      urlPreview: url.slice(0, 160) + (url.length > 160 ? '…' : '')
-    });
-  }
-  return url;
+    await sha256(canonicalRequest)
+  ].join('\n')
+
+  // Calculate signature
+  const signingKey = await getSignatureKey(secretAccessKey, dateStamp, region, service)
+  const signature = await hmacSha256(signingKey, stringToSign)
+
+  // Build final URL
+  const finalQueryString = `${queryString}&X-Amz-Signature=${signature}`
+  const finalUrl = `https://${host}${canonicalUri}?${finalQueryString}`
+  
+  console.log('Generated presigned URL:', finalUrl.substring(0, 100) + '...');
+  return finalUrl
 }
-function toAmzDate(d) {
-  const pad = (n)=>n.toString().padStart(2, '0');
-  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
+
+async function sha256(message: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(message)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
 }
-function encRfc3986(str) {
-  return encodeURIComponent(str).replace(/[!'()*]/g, (c)=>`%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+async function hmacSha256(key: Uint8Array, message: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const keyObject = await crypto.subtle.importKey(
+    'raw',
+    key,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  const signature = await crypto.subtle.sign('HMAC', keyObject, encoder.encode(message))
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
 }
-function encodePath(path) {
-  return path.split('/').map(encodePathSegment).join('/');
-}
-function encodePathSegment(seg) {
-  return encRfc3986(seg);
-}
-async function sha256Hex(message) {
-  const data = new TextEncoder().encode(message);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map((b)=>b.toString(16).padStart(2, '0')).join('');
-}
-async function hmac(keyBytes, msg) {
-  const enc = new TextEncoder();
-  const keyData = typeof keyBytes === 'string' ? enc.encode(keyBytes) : keyBytes;
-  const k = await crypto.subtle.importKey('raw', keyData, {
-    name: 'HMAC',
-    hash: 'SHA-256'
-  }, false, [
-    'sign'
-  ]);
-  const sig = await crypto.subtle.sign('HMAC', k, enc.encode(msg));
-  return new Uint8Array(sig);
-}
-async function hmacHex(keyBytes, msg) {
-  const enc = new TextEncoder();
-  const k = await crypto.subtle.importKey('raw', keyBytes, {
-    name: 'HMAC',
-    hash: 'SHA-256'
-  }, false, [
-    'sign'
-  ]);
-  const sig = await crypto.subtle.sign('HMAC', k, enc.encode(msg));
-  return Array.from(new Uint8Array(sig)).map((b)=>b.toString(16).padStart(2, '0')).join('');
-}
-async function getSignatureKey(secretKey, dateStamp, region, service) {
-  const kDate = await hmac('AWS4' + secretKey, dateStamp);
-  const kRegion = await hmac(kDate, region);
-  const kService = await hmac(kRegion, service);
-  return await hmac(kService, 'aws4_request');
+
+async function getSignatureKey(
+  key: string,
+  dateStamp: string,
+  regionName: string,
+  serviceName: string
+): Promise<Uint8Array> {
+  const encoder = new TextEncoder()
+  
+  let kDate = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode('AWS4' + key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  kDate = new Uint8Array(await crypto.subtle.sign('HMAC', kDate, encoder.encode(dateStamp)))
+
+  let kRegion = await crypto.subtle.importKey(
+    'raw',
+    kDate,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  kRegion = new Uint8Array(await crypto.subtle.sign('HMAC', kRegion, encoder.encode(regionName)))
+
+  let kService = await crypto.subtle.importKey(
+    'raw',
+    kRegion,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  kService = new Uint8Array(await crypto.subtle.sign('HMAC', kService, encoder.encode(serviceName)))
+
+  let kSigning = await crypto.subtle.importKey(
+    'raw',
+    kService,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+  return new Uint8Array(await crypto.subtle.sign('HMAC', kSigning, encoder.encode('aws4_request')))
 }
