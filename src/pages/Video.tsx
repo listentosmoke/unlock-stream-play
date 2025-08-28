@@ -253,10 +253,9 @@ const Video = () => {
           <div className="lg:col-span-2">
             <div className="aspect-video bg-video-bg rounded-lg overflow-hidden mb-4 relative">
               {isUnlocked ? (
-                video.r2_object_key || video.full_video_url ? (
+                video.r2_object_key ? (
                   <VideoPlayer 
                     objectKey={video.r2_object_key}
-                    legacyUrl={video.full_video_url}
                     mimeType={video.mime_type || 'video/mp4'}
                     poster={video.thumbnail_url}
                     className="w-full h-full"
