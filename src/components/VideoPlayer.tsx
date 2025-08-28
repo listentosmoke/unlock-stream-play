@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { presignGetUrl } from '@/utils/r2';
 
 type Props = {
-  objectKey: string;
+  objectKey?: string;
+  legacyUrl?: string;    // fallback for old videos with full_video_url
   mimeType?: string;     // default 'video/mp4'
   poster?: string;       // thumbnail url
   autoPlay?: boolean;
@@ -18,6 +19,7 @@ const DEFAULT_TTL_S = 3600;
 
 export default function VideoPlayer({
   objectKey,
+  legacyUrl,
   mimeType = 'video/mp4',
   poster,
   autoPlay,
@@ -36,26 +38,36 @@ export default function VideoPlayer({
     setErr(null);
     setLoading(true);
     try {
-      const url = await presignGetUrl(objectKey, mimeType, DEFAULT_TTL_S);
+      let url: string;
+      
+      if (objectKey) {
+        // New system: generate fresh presigned URL
+        url = await presignGetUrl(objectKey, mimeType, DEFAULT_TTL_S);
+        
+        // Schedule refresh for presigned URLs
+        if (timerRef.current) {
+          window.clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        const refreshInMs = Math.max((DEFAULT_TTL_S - REFRESH_MARGIN_S) * 1000, 30_000);
+        timerRef.current = window.setTimeout(() => {
+          fetchUrl().catch(() => {/* swallow; will retry on play/error */});
+        }, refreshInMs);
+      } else if (legacyUrl) {
+        // Legacy system: use the stored URL directly
+        url = legacyUrl;
+      } else {
+        throw new Error('No video source available');
+      }
+      
       setLiveUrl(url);
       onUrl?.(url);
-
-      // Clear existing refresh timer
-      if (timerRef.current) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      // Schedule refresh a bit before it expires
-      const refreshInMs = Math.max((DEFAULT_TTL_S - REFRESH_MARGIN_S) * 1000, 30_000);
-      timerRef.current = window.setTimeout(() => {
-        fetchUrl().catch(() => {/* swallow; will retry on play/error */});
-      }, refreshInMs);
     } catch (e: any) {
       setErr(e?.message || 'Failed to get playback URL');
     } finally {
       setLoading(false);
     }
-  }, [objectKey, mimeType, onUrl]);
+  }, [objectKey, legacyUrl, mimeType, onUrl]);
 
   useEffect(() => {
     fetchUrl();
