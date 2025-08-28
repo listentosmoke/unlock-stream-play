@@ -4,6 +4,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { Header } from '@/components/layout/Header';
 import { VideoThumbnail } from '@/components/video/VideoThumbnail';
 import { VideoPlaceholder } from '@/components/video/VideoPlaceholder';
+import VideoPlayer from '@/components/VideoPlayer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -21,6 +22,7 @@ const Video = () => {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [tabUrl, setTabUrl] = useState<string>('');
 
   useEffect(() => {
     if (id) {
@@ -251,15 +253,14 @@ const Video = () => {
           <div className="lg:col-span-2">
             <div className="aspect-video bg-video-bg rounded-lg overflow-hidden mb-4 relative">
               {isUnlocked ? (
-                video.full_video_url ? (
-                  <video 
-                    controls 
-                    className="w-full h-full"
+                video.r2_object_key ? (
+                  <VideoPlayer 
+                    objectKey={video.r2_object_key}
+                    mimeType={video.mime_type || 'video/mp4'}
                     poster={video.thumbnail_url}
-                  >
-                    <source src={video.full_video_url} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
+                    className="w-full h-full"
+                    onUrl={setTabUrl}
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground">
                     <p className="text-sm sm:text-base">Video file not available</p>
@@ -311,7 +312,19 @@ const Video = () => {
 
             {/* Video details */}
             <div className="space-y-4">
-              <h1 className="text-xl sm:text-2xl font-bold leading-tight">{video.title}</h1>
+              <div className="flex items-start justify-between gap-4">
+                <h1 className="text-xl sm:text-2xl font-bold leading-tight flex-1">{video.title}</h1>
+                {tabUrl && isUnlocked && (
+                  <a 
+                    href={tabUrl} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="text-sm text-primary hover:text-primary/80 underline whitespace-nowrap"
+                  >
+                    Open in new tab
+                  </a>
+                )}
+              </div>
               
               <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
