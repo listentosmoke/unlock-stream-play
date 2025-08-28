@@ -3,19 +3,30 @@ import { presignGetUrl } from '@/utils/r2';
 
 type Props = {
   objectKey?: string;
-  legacyUrl?: string;    // fallback for old videos with full_video_url
+  legacyUrl?: string;    // old rows that stored a full presigned URL
   mimeType?: string;     // default 'video/mp4'
   poster?: string;       // thumbnail url
   autoPlay?: boolean;
   controls?: boolean;
   className?: string;
   style?: React.CSSProperties;
-  // If you render an "Open in new tab" anchor, feed it from the liveUrl state below
-  onUrl?: (url: string) => void;
+  onUrl?: (url: string) => void; // for "open in new tab"
 };
 
 const REFRESH_MARGIN_S = 120; // refresh 2 minutes before expiry
 const DEFAULT_TTL_S = 3600;
+
+function deriveObjectKeyFromLegacyUrl(u: string | undefined): string | null {
+  if (!u) return null;
+  try {
+    const url = new URL(u);
+    // R2 virtual-hosted endpoint path is "/<objectKey>"
+    const path = url.pathname.startsWith('/') ? url.pathname.slice(1) : url.pathname;
+    return path || null;
+  } catch {
+    return null;
+  }
+}
 
 export default function VideoPlayer({
   objectKey,
@@ -37,32 +48,41 @@ export default function VideoPlayer({
   const fetchUrl = useCallback(async () => {
     setErr(null);
     setLoading(true);
+
     try {
-      let url: string;
-      
-      if (objectKey) {
-        // New system: generate fresh presigned URL
-        url = await presignGetUrl(objectKey, mimeType, DEFAULT_TTL_S);
-        
-        // Schedule refresh for presigned URLs
-        if (timerRef.current) {
-          window.clearTimeout(timerRef.current);
-          timerRef.current = null;
+      let key = objectKey;
+      if (!key && legacyUrl) {
+        key = deriveObjectKeyFromLegacyUrl(legacyUrl) || undefined;
+        if (!key) {
+          // As an absolute last-resort fallback (discouraged): use legacyUrl directly.
+          console.warn('[VideoPlayer] Could not parse objectKey from legacyUrl; using legacy URL directly (may expire).');
+          setLiveUrl(legacyUrl);
+          onUrl?.(legacyUrl);
+          setLoading(false);
+          return;
         }
-        const refreshInMs = Math.max((DEFAULT_TTL_S - REFRESH_MARGIN_S) * 1000, 30_000);
-        timerRef.current = window.setTimeout(() => {
-          fetchUrl().catch(() => {/* swallow; will retry on play/error */});
-        }, refreshInMs);
-      } else if (legacyUrl) {
-        // Legacy system: use the stored URL directly
-        url = legacyUrl;
-      } else {
-        throw new Error('No video source available');
       }
-      
+
+      if (!key) {
+        throw new Error('No video source available (missing objectKey/legacyUrl)');
+      }
+
+      console.debug('[VideoPlayer] Presigning GET for', { objectKey: key, mimeType });
+      const url = await presignGetUrl(key, mimeType, DEFAULT_TTL_S);
       setLiveUrl(url);
       onUrl?.(url);
+
+      // schedule a refresh a bit before expiry
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      const refreshInMs = Math.max((DEFAULT_TTL_S - REFRESH_MARGIN_S) * 1000, 30_000);
+      timerRef.current = window.setTimeout(() => {
+        fetchUrl().catch(() => {/* retry on play/error anyway */});
+      }, refreshInMs);
     } catch (e: any) {
+      console.error('[VideoPlayer] Failed to get playback URL:', e);
       setErr(e?.message || 'Failed to get playback URL');
     } finally {
       setLoading(false);
@@ -79,19 +99,16 @@ export default function VideoPlayer({
     };
   }, [fetchUrl]);
 
-  // If fetch failed or URL expired mid-play, retry when user hits play
   const handlePlay = async () => {
     if (!liveUrl) {
       await fetchUrl();
-      // re-attach source and play
       videoRef.current?.load();
       try { await videoRef.current?.play(); } catch {}
     }
   };
 
-  // If the <video> errors (e.g., 403/ExpiredRequest), auto-refresh once
   const handleError = async () => {
-    // Try one immediate refresh then reload the element
+    // If expired mid-play or network hiccup, one immediate refresh
     try {
       await fetchUrl();
       videoRef.current?.load();
@@ -99,7 +116,7 @@ export default function VideoPlayer({
         try { await videoRef.current?.play(); } catch {}
       }
     } catch (e) {
-      // surface error to UI
+      console.error('[VideoPlayer] refresh after error failed', e);
     }
   };
 
@@ -123,6 +140,9 @@ export default function VideoPlayer({
       onPlay={handlePlay}
       onError={handleError}
       preload="metadata"
+      // helpful for R2 cross-origin range requests
+      crossOrigin="anonymous"
+      playsInline
     >
       {liveUrl ? <source src={liveUrl} type={mimeType} /> : null}
       {loading ? 'Loading…' : 'Your browser cannot play this video.'}
