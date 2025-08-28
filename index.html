@@ -7,40 +7,7 @@
     <meta name="description" content="xPremium video streaming platform with point-based content unlocking" />
     <meta name="author" content="LockedContent" />
     <meta name="image" content="/og-image.png" />
-
-    <!-- ✅ Content Security Policy (allows blob: video + Supabase + R2) -->
-    <meta http-equiv="Content-Security-Policy" content="
-      default-src 'self';
-      base-uri 'self';
-      frame-ancestors 'self';
-      object-src 'none';
-      upgrade-insecure-requests;
-
-      script-src 'self';
-      style-src 'self' 'unsafe-inline';
-      font-src 'self' data:;
-
-      img-src
-        'self'
-        data:
-        blob:
-        https://yuqujmglvhnkgqflnlys.supabase.co;
-
-      media-src
-        'self'
-        blob:
-        data:
-        https://videos.59a242463683849be135e587e0b74a4e.r2.cloudflarestorage.com;
-
-      connect-src
-        'self'
-        https://yuqujmglvhnkgqflnlys.supabase.co
-        https://videos.59a242463683849be135e587e0b74a4e.r2.cloudflarestorage.com
-        wss://yuqujmglvhnkgqflnlys.supabase.co;
-
-      worker-src 'self' blob:;
-    ">
-
+    
     <!-- Favicon -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="/favicon.svg">
