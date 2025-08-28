@@ -9,6 +9,19 @@
     <meta name="image" content="/og-image.png" />
 
     <!-- ✅ Content Security Policy (allows blob: video + Supabase + R2) -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      base-uri 'self';
+      object-src 'none';
+      upgrade-insecure-requests;
+      script-src 'self';
+      style-src 'self' 'unsafe-inline';
+      font-src 'self' data:;
+      img-src 'self' data: blob: https://yuqujmglvhnkgqflnlys.supabase.co;
+      media-src 'self' https: blob: data: https://videos.59a242463683849be135e587e0b74a4e.r2.cloudflarestorage.com https://yuqujmglvhnkgqflnlys.supabase.co;
+      connect-src 'self' https://yuqujmglvhnkgqflnlys.supabase.co wss://yuqujmglvhnkgqflnlys.supabase.co https://videos.59a242463683849be135e587e0b74a4e.r2.cloudflarestorage.com blob:;
+      worker-src 'self' blob:;
+    ">
 
 
     <!-- Favicon -->
