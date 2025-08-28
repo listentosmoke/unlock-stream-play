@@ -114,6 +114,20 @@ serve(async (req)=>{
             success: true
           });
         }
+      case 'presign-get':
+        {
+          const expires = body.expires || 3600;
+          const mimeType = body.fileType || 'video/mp4';
+          const url = await createPresignedUrl(endpoint, objectKey, accessKeyId, secretAccessKey, 'GET', {
+            'response-content-type': mimeType,
+            'response-content-disposition': 'inline'
+          }, expires);
+          return json({
+            url,
+            presignedUrl: url,
+            objectKey
+          });
+        }
       case 'diagnose':
         {
           const url = await createPresignedUrl(endpoint, '', accessKeyId, secretAccessKey, 'GET', {
