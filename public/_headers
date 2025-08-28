@@ -1,15 +1,5 @@
 /*
-  Content-Security-Policy: default-src 'self';
-    base-uri 'self';
-    object-src 'none';
-    frame-ancestors 'self';
-    img-src 'self' data: https://*.supabase.co https://*.r2.cloudflarestorage.com;
-    media-src 'self' https: blob: data: https://*.r2.cloudflarestorage.com https://*.supabase.co;
-    connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.r2.cloudflarestorage.com blob:;
-    script-src 'self' 'unsafe-inline' 'unsafe-eval';
-    style-src 'self' 'unsafe-inline';
-    font-src 'self' data:;
-    worker-src 'self' blob:;
+  Content-Security-Policy: default-src 'self'; base-uri 'self'; frame-ancestors 'self'; object-src 'none'; upgrade-insecure-requests; img-src 'self' data: blob: https://yuqujmglvhnkgqflnlys.supabase.co; media-src 'self' https: blob: data: https://videos.59a242463683849be135e587e0b74a4e.r2.cloudflarestorage.com https://yuqujmglvhnkgqflnlys.supabase.co; connect-src 'self' https://yuqujmglvhnkgqflnlys.supabase.co wss://yuqujmglvhnkgqflnlys.supabase.co https://videos.59a242463683849be135e587e0b74a4e.r2.cloudflarestorage.com blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; worker-src 'self' blob:;
   Referrer-Policy: strict-origin-when-cross-origin
   X-Content-Type-Options: nosniff
   Permissions-Policy: camera=(), microphone=(), geolocation=()
