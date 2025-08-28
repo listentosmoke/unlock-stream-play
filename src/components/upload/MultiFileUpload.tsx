@@ -23,6 +23,8 @@ interface UploadFile {
 
 type PartETag = { PartNumber: number; ETag: string };
 
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+
 function safeId() {
   try {
     const rnd = crypto.getRandomValues(new Uint32Array(2));
@@ -49,7 +51,7 @@ export default function MultiFileUpload() {
   }, [user, navigate]);
   if (!user) return null;
 
-  // ---- Helpers to update list safely ----
+  // ---- safe state reads / counters (prevents `.length` crash) ----
   const filesSafe = Array.isArray(uploadFiles) ? uploadFiles : [];
 
   const counts = useMemo(() => {
@@ -67,6 +69,7 @@ export default function MultiFileUpload() {
     ? Math.round(filesSafe.reduce((s, f) => s + (typeof f.progress === 'number' ? f.progress : 0), 0) / counts.total)
     : 0;
 
+  // ---- list helpers ----
   const addFiles = useCallback((files: FileList) => {
     const toAdd: UploadFile[] = [];
     for (let i = 0; i < files.length; i++) {
@@ -120,19 +123,33 @@ export default function MultiFileUpload() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const removeFile = (id: string) => {
-    setUploadFiles(prev => prev.filter(f => f.id !== id));
-  };
-
-  const updateFile = (id: string, updates: Partial<UploadFile>) => {
+  const removeFile = (id: string) => setUploadFiles(prev => prev.filter(f => f.id !== id));
+  const updateFile = (id: string, updates: Partial<UploadFile>) =>
     setUploadFiles(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
-  };
 
-  // ---- R2 Uploads via Edge Function (presigned) ----
-  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB parts
+  // ---- R2 presign helpers ----
+  const getObjectWithRetry = async (objectKey: string, tries = 6) => {
+    let lastErr: any = null;
+    for (let i = 0; i < tries; i++) {
+      try {
+        const { data, error } = await supabase.functions.invoke('r2-presign', {
+          body: { action: 'get-object', objectKey, expires: 3600 },
+        });
+        if (error) throw error;
+        if (data?.presignedUrl) return data.presignedUrl as string;
+        throw new Error('No presignedUrl in response');
+      } catch (e: any) {
+        lastErr = e;
+        // backoff: 250ms, 500ms, 800ms, 1200ms, 1800ms, 2500ms
+        const wait = [250, 500, 800, 1200, 1800, 2500][Math.min(i, 5)];
+        await new Promise(r => setTimeout(r, wait));
+      }
+    }
+    console.warn('GET presign still failing after retries; continuing without it', lastErr);
+    return null; // non-fatal
+  };
 
   const simpleUpload = async (item: UploadFile) => {
-    // 1) ask edge to sign a simple PUT
     const { data, error } = await supabase.functions.invoke('r2-presign', {
       body: {
         action: 'simple-upload',
@@ -143,14 +160,11 @@ export default function MultiFileUpload() {
     });
     if (error) throw error;
 
-    // 2) PUT with the same content-type used for signing
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
           const pct = Math.round((e.loaded / e.total) * 100);
-          // map 20..90 for UI parity
           updateFile(item.id, { progress: 20 + Math.round(pct * 0.7) });
         }
       });
@@ -161,13 +175,14 @@ export default function MultiFileUpload() {
       xhr.send(item.file);
     });
 
-    // 3) edge returns a signed GET already
-    return { objectKey: data.objectKey as string, signedGetUrl: data.signedGetUrl as string };
+    return { objectKey: data.objectKey as string, signedGetUrl: (data.signedGetUrl as string) ?? null };
   };
 
   const multipartUpload = async (item: UploadFile) => {
     const totalChunks = Math.ceil(item.file.size / CHUNK_SIZE);
-    let uploadId = ''; let objectKey = '';
+    let uploadId = '';
+    let objectKey = '';
+    let didComplete = false;
 
     try {
       // 1) initiate
@@ -175,7 +190,7 @@ export default function MultiFileUpload() {
         body: {
           action: 'initiate-multipart',
           fileName: item.file.name,
-          fileType: item.file.type,   // ensures final object has correct Content-Type
+          fileType: item.file.type,
           fileSize: item.file.size,
         },
       });
@@ -184,9 +199,8 @@ export default function MultiFileUpload() {
       objectKey = init.objectKey;
       if (!uploadId || !objectKey) throw new Error('Missing uploadId/objectKey from initiate-multipart');
 
-      const partETags: PartETag[] = [];
-
-      // 2) upload parts
+      // 2) parts
+      const parts: PartETag[] = [];
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, item.file.size);
@@ -202,39 +216,37 @@ export default function MultiFileUpload() {
         if (!res.ok) throw new Error(`Part ${partNumber} failed: ${res.status}`);
         const etag = res.headers.get('ETag');
         if (!etag) throw new Error(`Missing ETag for part ${partNumber}`);
-        partETags.push({ PartNumber: partNumber, ETag: etag });
+        parts.push({ PartNumber: partNumber, ETag: etag });
 
-        // progress (roughly map to 20..90)
         const pct = Math.round(((i + 1) / totalChunks) * 100);
         updateFile(item.id, { progress: 20 + Math.round(pct * 0.7) });
       }
 
       // 3) complete
       const { data: done, error: completeErr } = await supabase.functions.invoke('r2-presign', {
-        body: { action: 'complete-multipart', objectKey, uploadId, parts: partETags },
+        body: { action: 'complete-multipart', objectKey, uploadId, parts },
       });
       if (completeErr) throw completeErr;
+      didComplete = true;
 
-      // prefer signedGetUrl from complete; otherwise, ask explicitly
-      let signedGetUrl: string | undefined = done?.signedGetUrl;
-      if (!signedGetUrl) {
-        const { data: getObj, error: getErr } = await supabase.functions.invoke('r2-presign', {
-          body: { action: 'get-object', objectKey, expires: 3600 },
-        });
-        if (getErr) throw getErr;
-        signedGetUrl = getObj?.presignedUrl;
-      }
+      // prefer url from complete
+      let signedGetUrl: string | null = done?.signedGetUrl ?? null;
 
-      if (!signedGetUrl) throw new Error('Missing signed GET URL after completion');
-      return { objectKey, signedGetUrl };
-    } catch (e: any) {
-      // Best effort abort (ignore abort errors)
-      if (uploadId && objectKey) {
+      // if not returned (or a race happens), fetch GET url with retry — do NOT fail upload if this hiccups
+      if (!signedGetUrl) signedGetUrl = await getObjectWithRetry(objectKey);
+
+      return { objectKey, signedGetUrl: signedGetUrl ?? null };
+    } catch (e) {
+      // only try to abort if we actually initiated and haven't completed
+      if (uploadId && objectKey && !didComplete) {
         try {
           await supabase.functions.invoke('r2-presign', {
             body: { action: 'abort-multipart', objectKey, uploadId },
           });
-        } catch { /* ignore */ }
+        } catch (abortErr) {
+          // Ignore abort errors — they’re often non-actionable and can happen if R2 closed the upload itself
+          console.warn('Abort failed (ignored):', abortErr);
+        }
       }
       throw e;
     }
@@ -245,20 +257,19 @@ export default function MultiFileUpload() {
     return multipartUpload(item);
   };
 
-  // Upload one file (returns outcome so startUpload can count deterministically)
   const uploadOne = async (uf: UploadFile): Promise<{ id: string; ok: boolean }> => {
     try {
       updateFile(uf.id, { status: 'uploading', progress: 10 });
 
-      // thumbnail first (cheap)
+      // 1) thumbnail first
       const thumbBlob = await generateVideoThumbnail(uf.file);
       updateFile(uf.id, { progress: 20 });
 
-      // video -> R2
+      // 2) video to R2
       const { signedGetUrl, objectKey } = await uploadToR2(uf);
       updateFile(uf.id, { progress: 90 });
 
-      // thumbnail -> Supabase Storage (public)
+      // 3) thumbnail to Supabase Storage
       const thumbName = `thumbnails/${user!.id}/${Date.now()}-${uf.id}-thumbnail.jpg`;
       const { error: tErr } = await supabase.storage.from('videos').upload(thumbName, thumbBlob, {
         cacheControl: '3600',
@@ -269,12 +280,12 @@ export default function MultiFileUpload() {
       const { data: thumbPub } = supabase.storage.from('videos').getPublicUrl(thumbName);
       const thumbnailUrl = thumbPub?.publicUrl ?? null;
 
-      // metadata -> DB
+      // 4) save metadata — note: full_video_url may be null if GET presign still propagating
       const { error: dbErr } = await supabase.from('videos').insert({
         title: uf.title.trim(),
         description: uf.description?.trim() || null,
         r2_object_key: objectKey,
-        full_video_url: signedGetUrl, // presigned GET for immediate playback
+        full_video_url: signedGetUrl ?? null,
         thumbnail_url: thumbnailUrl,
         uploader_id: user!.id,
         status: 'pending',
@@ -291,7 +302,6 @@ export default function MultiFileUpload() {
     }
   };
 
-  // ---- Start uploads with concurrency control; NO `.length` crashes ----
   const startUpload = async () => {
     const valid = filesSafe.filter(f => f.title.trim() && f.status === 'pending');
     if (!valid.length) {
@@ -310,14 +320,12 @@ export default function MultiFileUpload() {
 
     for (let i = 0; i < valid.length; i += CONCURRENCY) {
       const slice = valid.slice(i, i + CONCURRENCY);
-      // run this batch
       const settled = await Promise.allSettled(slice.map(uploadOne));
       results.push(...settled);
     }
 
     setIsUploading(false);
 
-    // count deterministically from `results` (no reliance on react state timing)
     let okCount = 0, failCount = 0;
     for (const r of results) {
       if (r.status === 'fulfilled') {
@@ -332,9 +340,7 @@ export default function MultiFileUpload() {
       description: `${okCount} video(s) uploaded successfully${failCount ? `, ${failCount} failed` : ''}`,
     });
 
-    if (okCount > 0) {
-      setTimeout(() => navigate('/'), 1500);
-    }
+    if (okCount > 0) setTimeout(() => navigate('/'), 1500);
   };
 
   return (
@@ -374,13 +380,13 @@ export default function MultiFileUpload() {
                 </Button>
                 <p className="text-sm text-muted-foreground">Drop video files here or click to browse</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Supports MP4, MOV, AVI, MKV • Unlimited file sizes via R2
+                  Supports MP4, MOV, AVI, MKV • Large files via R2
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Upload Progress (overall) */}
+          {/* Overall Progress */}
           {isUploading && (
             <Card className="mb-6">
               <CardContent className="p-4">
@@ -471,7 +477,7 @@ export default function MultiFileUpload() {
             </Card>
           )}
 
-          {/* Action Buttons */}
+          {/* Actions */}
           {counts.total > 0 && (
             <div className="flex gap-4">
               <Button
@@ -497,7 +503,7 @@ export default function MultiFileUpload() {
             </div>
           )}
 
-          {/* Instructions */}
+          {/* Help */}
           <Card className="mt-6">
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -506,8 +512,7 @@ export default function MultiFileUpload() {
                   <ul className="text-sm text-muted-foreground space-y-1">
                     <li>• Drag & drop multiple files</li>
                     <li>• Upload progress tracking</li>
-                    <li>• Background upload support</li>
-                    <li>• Large file support</li>
+                    <li>• Large file support (multipart)</li>
                     <li>• Automatic thumbnail generation</li>
                   </ul>
                 </div>
