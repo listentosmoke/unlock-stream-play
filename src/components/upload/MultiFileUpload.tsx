@@ -1,11 +1,4 @@
-// ===============================
-// File: src/components/upload/MultiFileUpload.tsx
-// React client: robust queue + multipart/simple upload + thumbnail
-// - Only calls get-object AFTER completion (but edge function is tolerant anyway)
-// - No undefined `.length` problems
-// ===============================
-
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/auth/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -38,19 +31,24 @@ export default function MultiFileUpload() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
 
-  if (!user) {
-    navigate('/auth');
-    return null;
-  }
+  // Redirect if not authenticated (avoid navigate during render)
+  useEffect(() => {
+    if (!user) navigate('/auth');
+  }, [user, navigate]);
 
-  const generateFileId = () => Math.random().toString(36).substr(2, 9);
+  if (!user) return null;
+
+  const generateFileId = () => {
+    // stable unique id
+    return (crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2, 11));
+  };
 
   const addFiles = useCallback((files: FileList) => {
     const newFiles: UploadFile[] = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       if (file.type.startsWith('video/')) {
-        const fileName = file.name.replace(/\.[^/.]+$/, '');
+        const fileName = file.name.replace(/\.[^/.]+$/, ''); // Remove extension for title
         newFiles.push({
           id: generateFileId(),
           file,
@@ -63,7 +61,11 @@ export default function MultiFileUpload() {
     }
 
     if (newFiles.length === 0) {
-      toast({ title: 'Error', description: 'Please select valid video files', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Please select valid video files',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -71,90 +73,186 @@ export default function MultiFileUpload() {
   }, [toast]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    dragCounterRef.current++; if (!isDragging) setIsDragging(true);
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (!isDragging) setIsDragging(true);
   }, [isDragging]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation();
-    dragCounterRef.current--; if (dragCounterRef.current === 0) setIsDragging(false);
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setIsDragging(false);
   }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); }, []);
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation(); setIsDragging(false); dragCounterRef.current = 0;
-    const files = e.dataTransfer.files; if (files.length > 0) addFiles(files);
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+    const files = e.dataTransfer.files;
+    if (files.length > 0) addFiles(files);
   }, [addFiles]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files; if (files) addFiles(files);
+    const files = e.target.files;
+    if (files) addFiles(files);
+    // Reset input
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const removeFile = (id: string) => setUploadFiles((prev) => prev.filter((f) => f.id !== id));
-  const updateFile = (id: string, updates: Partial<UploadFile>) => setUploadFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
+  const removeFile = (id: string) => {
+    setUploadFiles((prev) => prev.filter((f) => f.id !== id));
+  };
 
-  // ---- Upload orchestration ----
-  const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+  const updateFile = (id: string, updates: Partial<UploadFile>) => {
+    setUploadFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
+  };
 
+  // (Optional utility; not used in flow)
+  const checkBucketSize = async (): Promise<number> => {
+    try {
+      const getAllFiles = async (folder = '', allFiles: any[] = []): Promise<any[]> => {
+        const { data, error } = await supabase.storage.from('videos').list(folder, { limit: 1000 });
+        if (error) throw error;
+        for (const file of data || []) {
+          if (file.name && (file as any).metadata?.size) {
+            const fullPath = folder ? `${folder}/${file.name}` : file.name;
+            allFiles.push({ ...file, path: fullPath });
+          }
+        }
+        return allFiles;
+      };
+
+      const files = await getAllFiles();
+      let totalSize = 0;
+      for (const file of files) {
+        if ((file as any).metadata?.size) totalSize += (file as any).metadata.size;
+      }
+      console.log(`Current bucket size: ${totalSize} bytes (${(totalSize / 1024 / 1024).toFixed(2)} MB)`);
+      return totalSize;
+    } catch (error) {
+      console.error('Error checking bucket size:', error);
+      return 0;
+    }
+  };
+
+  /**
+   * Upload a file to R2 using presigned URLs.
+   * Returns a presigned GET URL `url` (for immediate playback) and the `objectKey`.
+   */
   const uploadToR2 = async (uploadFile: UploadFile): Promise<{ url: string; objectKey: string }> => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB parts
     const fileSize = uploadFile.file.size;
-    if (fileSize < CHUNK_SIZE) return await simpleUpload(uploadFile);
-    return await multipartUpload(uploadFile);
+
+    if (fileSize < CHUNK_SIZE) {
+      return await simpleUpload(uploadFile);
+    } else {
+      return await multipartUpload(uploadFile);
+    }
   };
 
   const simpleUpload = async (uploadFile: UploadFile): Promise<{ url: string; objectKey: string }> => {
-    const { data: presignData, error: presignError } = await supabase.functions.invoke('r2-presign', {
-      body: {
-        action: 'simple-upload',
-        fileName: uploadFile.file.name,
-        fileType: uploadFile.file.type,
-        fileSize: uploadFile.file.size,
-      },
-    });
-    if (presignError) throw presignError;
-
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.upload.addEventListener('progress', (e) => {
-        if (e.lengthComputable) {
-          const percentComplete = Math.round((e.loaded / e.total) * 100);
-          updateFile(uploadFile.id, { progress: 20 + Math.round(percentComplete * 0.7) });
-        }
+    try {
+      // 1) Get presigned URL for simple PUT
+      const { data: presignData, error: presignError } = await supabase.functions.invoke('r2-presign', {
+        body: {
+          action: 'simple-upload',
+          fileName: uploadFile.file.name,
+          fileType: uploadFile.file.type,
+          fileSize: uploadFile.file.size,
+        },
       });
-      xhr.addEventListener('load', () => { xhr.status === 200 ? resolve() : reject(new Error(`Upload failed ${xhr.status}`)); });
-      xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-      xhr.open('PUT', presignData.presignedUrl);
-      xhr.setRequestHeader('Content-Type', uploadFile.file.type);
-      xhr.send(uploadFile.file);
-    });
+      if (presignError) throw presignError;
 
-    return { url: presignData.signedGetUrl, objectKey: presignData.objectKey };
+      const { presignedUrl, objectKey } = presignData;
+
+      // 2) PUT the file
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 100);
+            updateFile(uploadFile.id, { progress: 20 + Math.round(percentComplete * 0.7) });
+          }
+        });
+
+        xhr.addEventListener('load', () => {
+          if (xhr.status === 200) resolve();
+          else reject(new Error(`Upload failed with status: ${xhr.status}`));
+        });
+
+        xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+
+        xhr.open('PUT', presignedUrl);
+        // not part of the signed headers, safe to set; ensures object metadata
+        xhr.setRequestHeader('Content-Type', uploadFile.file.type);
+        xhr.send(uploadFile.file);
+      });
+
+      // 3) Get a presigned GET URL for playback (forces video/mp4, inline)
+      const { data: getData, error: getErr } = await supabase.functions.invoke('r2-presign', {
+        body: { action: 'presign-get', objectKey },
+      });
+      if (getErr) throw getErr;
+
+      return { url: getData.url, objectKey };
+    } catch (error: any) {
+      throw new Error(`Simple upload failed: ${error.message}`);
+    }
   };
 
   const multipartUpload = async (uploadFile: UploadFile): Promise<{ url: string; objectKey: string }> => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB parts
     const file = uploadFile.file;
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     let initData: any = null;
 
     try {
       console.log('=== MULTIPART UPLOAD START ===');
-      console.log('File details:', { name: file.name, size: file.size, type: file.type, totalChunks });
-      console.log('Initiating multipart upload...');
-
-      const { data: initResponse, error: initError } = await supabase.functions.invoke('r2-presign', {
-        body: { action: 'initiate-multipart', fileName: file.name, fileType: file.type, fileSize: file.size },
+      console.log('File details:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        totalChunks,
       });
+
+      // 1) Initiate multipart upload (sets Content-Type on final object)
+      console.log('Initiating multipart upload...');
+      const { data: initResponse, error: initError } = await supabase.functions.invoke('r2-presign', {
+        body: {
+          action: 'initiate-multipart',
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+        },
+      });
+
       console.log('Initiate response:', { initResponse, initError });
-      if (initError || !initResponse) throw new Error(initError?.message || 'Failed to initiate multipart');
+      if (initError) {
+        console.error('Initiate error details:', initError);
+        throw new Error(`Failed to initiate multipart upload: ${initError.message || JSON.stringify(initError)}`);
+      }
+      if (!initResponse) throw new Error('No response received from initiate-multipart');
 
       initData = initResponse;
       const { uploadId, objectKey } = initData;
-      if (!uploadId || !objectKey) throw new Error('Invalid initiate-multipart response');
-      console.log('Multipart upload initiated successfully:', { uploadId, objectKey });
+      if (!uploadId || !objectKey) {
+        console.error('Invalid initiate response:', initData);
+        throw new Error('Invalid response from initiate-multipart: missing uploadId or objectKey');
+      }
 
+      console.log('Multipart upload initiated successfully:', { uploadId, objectKey });
       const parts: Array<{ PartNumber: number; ETag: string }> = [];
+
+      // 2) Upload parts
       for (let i = 0; i < totalChunks; i++) {
         const start = i * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
@@ -162,38 +260,75 @@ export default function MultiFileUpload() {
         const partNumber = i + 1;
 
         const { data: partData, error: partError } = await supabase.functions.invoke('r2-presign', {
-          body: { action: 'get-part-url', objectKey, uploadId, partNumber },
+          body: {
+            action: 'get-part-url',
+            objectKey,
+            uploadId,
+            partNumber,
+          },
         });
-        if (partError) throw new Error(partError.message || `Failed to get URL for part ${partNumber}`);
+        if (partError) throw partError;
 
-        const partResponse = await fetch(partData.presignedUrl, { method: 'PUT', body: chunk });
+        const partResponse = await fetch(partData.presignedUrl, {
+          method: 'PUT',
+          body: chunk,
+        });
+
         if (!partResponse.ok) {
           const t = await partResponse.text().catch(() => '');
           throw new Error(`Failed to upload part ${partNumber} (${partResponse.status}): ${t}`);
         }
+
         const etag = partResponse.headers.get('ETag');
         if (!etag) throw new Error(`No ETag received for part ${partNumber}`);
+
         parts.push({ PartNumber: partNumber, ETag: etag });
 
         const progress = Math.round(((i + 1) / totalChunks) * 100);
         updateFile(uploadFile.id, { progress: 20 + Math.round(progress * 0.7) });
       }
 
+      // 3) Complete multipart upload
       const { data: completeData, error: completeError } = await supabase.functions.invoke('r2-presign', {
-        body: { action: 'complete-multipart', objectKey, uploadId, parts },
+        body: {
+          action: 'complete-multipart',
+          objectKey,
+          uploadId,
+          parts,
+        },
       });
-      if (completeError) throw new Error(completeError.message || 'Failed to complete multipart');
+      if (completeError) throw completeError;
 
-      const signedGetUrl: string = completeData?.signedGetUrl;
-      return { url: signedGetUrl, objectKey };
+      // 4) Get a presigned GET URL for playback (forces video/mp4, inline)
+      const { data: getData, error: getErr } = await supabase.functions.invoke('r2-presign', {
+        body: { action: 'presign-get', objectKey },
+      });
+      if (getErr) throw getErr;
+
+      return { url: getData.url, objectKey };
     } catch (error: any) {
       console.error('=== MULTIPART UPLOAD ERROR ===');
-      console.error('Error details:', { message: error.message, stack: error.stack, name: error.name, initData });
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        initData,
+      });
 
+      // Abort multipart upload on error if we have identifiers
       try {
         if (initData?.uploadId && initData?.objectKey) {
-          console.log('Aborting multipart upload:', { objectKey: initData.objectKey, uploadId: initData.uploadId });
-          await supabase.functions.invoke('r2-presign', { body: { action: 'abort-multipart', objectKey: initData.objectKey, uploadId: initData.uploadId } });
+          console.log('Aborting multipart upload:', {
+            objectKey: initData.objectKey,
+            uploadId: initData.uploadId,
+          });
+          await supabase.functions.invoke('r2-presign', {
+            body: {
+              action: 'abort-multipart',
+              objectKey: initData.objectKey,
+              uploadId: initData.uploadId,
+            },
+          });
         }
       } catch (abortError) {
         console.error('Failed to abort multipart upload:', abortError);
@@ -203,94 +338,129 @@ export default function MultiFileUpload() {
     }
   };
 
-  const uploadOne = async (uploadFile: UploadFile) => {
+  const uploadFile = async (uploadFile: UploadFile) => {
     try {
       updateFile(uploadFile.id, { status: 'uploading', progress: 0 });
 
+      // 1) Generate thumbnail first
       updateFile(uploadFile.id, { progress: 10 });
-      let thumbnailBlob: Blob | null = null;
-      try { thumbnailBlob = await generateVideoThumbnail(uploadFile.file); } catch {}
+      const thumbnailBlob = await generateVideoThumbnail(uploadFile.file);
+
       updateFile(uploadFile.id, { progress: 20 });
 
+      // 2) Upload to R2 and get the URL (presigned GET) and object key
       console.log('Uploading to R2 via presigned URLs...', { fileSize: uploadFile.file.size });
       const { url: videoUrl, objectKey } = await uploadToR2(uploadFile);
       console.log('R2 upload successful:', videoUrl);
 
       updateFile(uploadFile.id, { progress: 90 });
 
-      let thumbnailUrl: string | null = null;
-      if (thumbnailBlob) {
-        const thumbnailFileName = `thumbnails/${user.id}/${Date.now()}-${uploadFile.id}-thumbnail.jpg`;
-        const { error: thErr } = await supabase.storage.from('videos').upload(thumbnailFileName, thumbnailBlob, {
-          cacheControl: '3600', upsert: false, contentType: 'image/jpeg',
+      // 3) Upload thumbnail to Supabase Storage
+      const thumbnailFileName = `thumbnails/${user.id}/${Date.now()}-${uploadFile.id}-thumbnail.jpg`;
+      const { error: thumbnailUploadError } = await supabase.storage
+        .from('videos')
+        .upload(thumbnailFileName, thumbnailBlob, {
+          cacheControl: '3600',
+          upsert: false,
         });
-        if (!thErr) {
-          const { data: publicData } = supabase.storage.from('videos').getPublicUrl(thumbnailFileName);
-          thumbnailUrl = publicData.publicUrl;
-        }
+      if (thumbnailUploadError) {
+        console.error('Thumbnail upload error:', thumbnailUploadError);
+        throw new Error('Failed to upload thumbnail');
       }
+
+      const { data: { publicUrl: thumbnailUrl } } = supabase.storage
+        .from('videos')
+        .getPublicUrl(thumbnailFileName);
 
       updateFile(uploadFile.id, { progress: 95 });
 
-      const { error: dbError } = await supabase.from('videos').insert({
-        title: uploadFile.title.trim(),
-        description: uploadFile.description?.trim() || null,
-        r2_object_key: objectKey,
-        full_video_url: videoUrl,
-        thumbnail_url: thumbnailUrl,
-        uploader_id: user?.id,
-        status: 'pending',
-        unlock_cost: 10,
-        reward_points: 5,
-      });
-      if (dbError) throw new Error('Failed to save video metadata');
+      // 4) Store video metadata in Supabase
+      console.log('Storing video metadata...');
+      const { error: dbError } = await supabase
+        .from('videos')
+        .insert({
+          title: uploadFile.title.trim(),
+          description: uploadFile.description?.trim() || null,
+          r2_object_key: objectKey,
+          full_video_url: videoUrl, // presigned GET for immediate playback; do not rely on this long-term
+          thumbnail_url: thumbnailUrl,
+          uploader_id: user?.id,
+          status: 'pending',
+          unlock_cost: 10,
+          reward_points: 5,
+        });
 
-      updateFile(uploadFile.id, { status: 'completed', progress: 100 });
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw new Error('Failed to save video metadata');
+      }
+
+      updateFile(uploadFile.id, {
+        status: 'completed',
+        progress: 100,
+      });
+
       console.log('Upload completed successfully');
     } catch (error: any) {
       console.error('Upload file error:', error);
-      updateFile(uploadFile.id, { status: 'error', error: error?.message || 'Upload failed', progress: 0 });
+      updateFile(uploadFile.id, {
+        status: 'error',
+        error: error?.message || 'Upload failed',
+        progress: 0,
+      });
     }
   };
 
   const startUpload = async () => {
-    const valid = uploadFiles.filter((f) => f.title.trim() && f.status === 'pending');
-    if (valid.length === 0) {
-      toast({ title: 'Error', description: 'Please add files and provide titles for all videos', variant: 'destructive' });
+    const validFiles = uploadFiles.filter((f) => f.title.trim() && f.status === 'pending');
+
+    if (validFiles.length === 0) {
+      toast({
+        title: 'Error',
+        description: 'Please add files and provide titles for all videos',
+        variant: 'destructive',
+      });
       return;
     }
 
     setIsUploading(true);
-    const queue = [...valid];
-    const concurrency = Math.min(2, queue.length);
 
-    const workers = Array.from({ length: concurrency }, () => (async () => {
-      while (queue.length) {
-        const next = queue.shift();
-        if (!next) break;
-        await uploadOne(next);
-      }
-    })());
+    // Upload files in parallel with concurrency limit
+    const concurrencyLimit = 2;
+    const queue = [...validFiles];
+    const workers: Promise<void>[] = [];
 
+    const runNext = async () => {
+      const next = queue.shift();
+      if (!next) return;
+      await uploadFile(next);
+      await runNext();
+    };
+
+    for (let i = 0; i < Math.min(concurrencyLimit, queue.length); i++) {
+      workers.push(runNext());
+    }
     await Promise.allSettled(workers);
+
     setIsUploading(false);
 
-    const completed = uploadFiles.filter((f) => f.status === 'completed').length;
-    const failed = uploadFiles.filter((f) => f.status === 'error').length;
+    const completed = (fns => fns(uploadFiles).completed)((list) => list.filter((f) => f.status === 'completed')).length;
+    const failed = (fns => fns(uploadFiles).failed)((list) => list.filter((f) => f.status === 'error')).length;
 
-    if (completed > 0 || failed > 0) {
-      toast({ title: 'Upload Process Complete!', description: `${completed} video(s) uploaded successfully${failed ? `, ${failed} had errors` : ''}` });
+    toast({
+      title: 'Upload Process Complete!',
+      description: `${completed} video(s) uploaded successfully${failed > 0 ? `, ${failed} had errors` : ''}`,
+    });
+
+    if (completed > 0) {
+      setTimeout(() => navigate('/'), 2000);
     }
-
-    if (completed > 0) setTimeout(() => navigate('/'), 2000);
   };
 
-  const totalProgress = uploadFiles.length > 0
-    ? Math.round(uploadFiles.reduce((sum, f) => sum + f.progress, 0) / uploadFiles.length)
-    : 0;
-
-  const uploadingCount = uploadFiles.filter((f) => f.status === 'uploading').length;
-  const pendingCount = uploadFiles.filter((f) => f.status === 'pending').length;
+  const totalProgress =
+    uploadFiles.length > 0
+      ? Math.round(uploadFiles.reduce((sum, f) => sum + f.progress, 0) / uploadFiles.length)
+      : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -302,6 +472,7 @@ export default function MultiFileUpload() {
             <p className="text-muted-foreground">Drag and drop multiple videos or click to select files</p>
           </div>
 
+          {/* Drop Zone */}
           <Card className="mb-6">
             <CardContent className="p-6">
               <div
@@ -314,17 +485,27 @@ export default function MultiFileUpload() {
                 onDrop={handleDrop}
               >
                 <FileVideo className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                <input ref={fileInputRef} type="file" accept="video/*" multiple onChange={handleFileSelect} className="hidden" />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
                 <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="mb-4">
                   <UploadIcon className="h-4 w-4 mr-2" />
                   Select Video Files
                 </Button>
                 <p className="text-sm text-muted-foreground">Drop video files here or click to browse</p>
-                <p className="text-xs text-muted-foreground mt-1">Supports MP4, MOV, AVI, MKV • Unlimited file sizes via R2</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Supports MP4, MOV, AVI, MKV • Unlimited file sizes via R2
+                </p>
               </div>
             </CardContent>
           </Card>
 
+          {/* Upload Progress */}
           {isUploading && (
             <Card className="mb-6">
               <CardContent className="p-4">
@@ -337,6 +518,7 @@ export default function MultiFileUpload() {
             </Card>
           )}
 
+          {/* File List */}
           {uploadFiles.length > 0 && (
             <Card className="mb-6">
               <CardHeader>
@@ -363,16 +545,31 @@ export default function MultiFileUpload() {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                              <Input placeholder="Video title *" value={uploadFile.title} onChange={(e) => updateFile(uploadFile.id, { title: e.target.value })} disabled={uploadFile.status === 'uploading' || uploadFile.status === 'completed'} />
+                              <Input
+                                placeholder="Video title *"
+                                value={uploadFile.title}
+                                onChange={(e) => updateFile(uploadFile.id, { title: e.target.value })}
+                                disabled={uploadFile.status === 'uploading' || uploadFile.status === 'completed'}
+                              />
                             </div>
                             <div>
-                              <Textarea placeholder="Description (optional)" value={uploadFile.description} onChange={(e) => updateFile(uploadFile.id, { description: e.target.value })} rows={1} className="resize-none" disabled={uploadFile.status === 'uploading' || uploadFile.status === 'completed'} />
+                              <Textarea
+                                placeholder="Description (optional)"
+                                value={uploadFile.description}
+                                onChange={(e) => updateFile(uploadFile.id, { description: e.target.value })}
+                                rows={1}
+                                className="resize-none"
+                                disabled={uploadFile.status === 'uploading' || uploadFile.status === 'completed'}
+                              />
                             </div>
                           </div>
 
                           {uploadFile.status === 'uploading' && (
                             <div className="space-y-1">
-                              <div className="flex justify-between text-xs"><span>Uploading...</span><span>{uploadFile.progress}%</span></div>
+                              <div className="flex justify-between text-xs">
+                                <span>Uploading...</span>
+                                <span>{uploadFile.progress}%</span>
+                              </div>
                               <Progress value={uploadFile.progress} className="h-1" />
                             </div>
                           )}
@@ -399,18 +596,23 @@ export default function MultiFileUpload() {
             </Card>
           )}
 
+          {/* Action Buttons */}
           {uploadFiles.length > 0 && (
             <div className="flex gap-4">
-              <Button onClick={startUpload} disabled={isUploading || pendingCount === 0} className="flex-1">
+              <Button
+                onClick={startUpload}
+                disabled={isUploading || uploadFiles.filter((f) => f.status === 'pending').length === 0}
+                className="flex-1"
+              >
                 {isUploading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                    Uploading {uploadingCount} file(s)...
+                    Uploading {uploadFiles.filter((f) => f.status === 'uploading').length} file(s)...
                   </>
                 ) : (
                   <>
                     <UploadIcon className="h-4 w-4 mr-2" />
-                    Upload {pendingCount} file(s)
+                    Upload {uploadFiles.filter((f) => f.status === 'pending').length} file(s)
                   </>
                 )}
               </Button>
@@ -420,6 +622,7 @@ export default function MultiFileUpload() {
             </div>
           )}
 
+          {/* Instructions */}
           <Card className="mt-6">
             <CardContent className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
