@@ -143,6 +143,7 @@ serve(async (req)=>{
           });
           
           return json({
+            presignedUrl: presignedUrl,
             readUrl: presignedUrl,
             url: presignedUrl, // alias for compatibility
             objectKey: key,
