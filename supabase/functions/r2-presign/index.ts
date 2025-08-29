@@ -135,17 +135,19 @@ serve(async (req)=>{
         {
           if (!clientObjectKey && !fileName) return bad('Missing objectKey or fileName');
           const key = clientObjectKey || fileName;
+          const ttl = (expires && Number(expires) > 0 && Number(expires) <= 3600) ? Number(expires) : 3600;
           // Force response content-type to video/mp4 to fix legacy objects with wrong MIME
           const presignedUrl = await createPresignedUrl(endpoint, key, accessKeyId, secretAccessKey, 'GET', {
             'response-content-type': fileType || 'video/mp4',
             'response-content-disposition': 'inline'
           });
+          // Return all common field names for maximum compatibility
           return json({
             presignedUrl: presignedUrl,
             readUrl: presignedUrl,
             url: presignedUrl,
             objectKey: key,
-            expiresIn: 3600
+            expiresIn: ttl
           });
         }
       case 'set-content-type':

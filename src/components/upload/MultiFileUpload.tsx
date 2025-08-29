@@ -136,8 +136,9 @@ export default function MultiFileUpload() {
           body: { action: 'get-object', objectKey, expires: 3600 },
         });
         if (error) throw error;
-        if (data?.presignedUrl) return data.presignedUrl as string;
-        throw new Error('No presignedUrl in response');
+        const url = data?.presignedUrl ?? data?.readUrl ?? data?.url;
+        if (url) return url as string;
+        throw new Error('No presigned URL in response: ' + JSON.stringify(data));
       } catch (e: any) {
         lastErr = e;
         // backoff: 250ms, 500ms, 800ms, 1200ms, 1800ms, 2500ms
@@ -170,7 +171,8 @@ export default function MultiFileUpload() {
       });
       xhr.addEventListener('load', () => (xhr.status === 200 ? resolve() : reject(new Error(`Upload failed ${xhr.status}`))));
       xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
-      xhr.open('PUT', data.presignedUrl);
+      const uploadUrl = data.presignedUrl ?? data.readUrl ?? data.url;
+      xhr.open('PUT', uploadUrl);
       xhr.setRequestHeader('Content-Type', item.file.type);
       xhr.send(item.file);
     });
@@ -212,7 +214,8 @@ export default function MultiFileUpload() {
         });
         if (partErr) throw partErr;
 
-        const res = await fetch(part.presignedUrl, { method: 'PUT', body: blob });
+        const partUrl = part.presignedUrl ?? part.readUrl ?? part.url;
+        const res = await fetch(partUrl, { method: 'PUT', body: blob });
         if (!res.ok) throw new Error(`Part ${partNumber} failed: ${res.status}`);
         const etag = res.headers.get('ETag');
         if (!etag) throw new Error(`Missing ETag for part ${partNumber}`);
