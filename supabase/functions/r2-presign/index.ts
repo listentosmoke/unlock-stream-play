@@ -130,6 +130,60 @@ serve(async (req)=>{
             bodyPreview: text.slice(0, 400)
           });
         }
+      case 'get-object':
+      case 'get-read-url':
+        {
+          if (!clientObjectKey && !fileName) return bad('Missing objectKey or fileName');
+          const key = clientObjectKey || fileName;
+          
+          // Force response content-type to video/mp4 to fix legacy objects with wrong MIME
+          const presignedUrl = await createPresignedUrl(endpoint, key, accessKeyId, secretAccessKey, 'GET', {
+            'response-content-type': fileType || 'video/mp4',
+            'response-content-disposition': 'inline'
+          });
+          
+          return json({
+            readUrl: presignedUrl,
+            url: presignedUrl, // alias for compatibility
+            objectKey: key,
+            expiresIn: 3600
+          });
+        }
+      case 'set-content-type':
+        {
+          if (!clientObjectKey) return bad('Missing objectKey');
+          if (!fileType) return bad('Missing fileType/contentType');
+          
+          // Copy object to itself with new content-type metadata
+          const copySource = `${bucketName}/${clientObjectKey}`;
+          const copyUrl = await createPresignedUrl(endpoint, clientObjectKey, accessKeyId, secretAccessKey, 'PUT', {
+            'x-amz-copy-source': copySource,
+            'x-amz-metadata-directive': 'REPLACE'
+          });
+          
+          const headers = {
+            'x-amz-copy-source': copySource,
+            'x-amz-metadata-directive': 'REPLACE',
+            'Content-Type': fileType
+          };
+          
+          const res = await fetch(copyUrl, {
+            method: 'PUT',
+            headers
+          });
+          
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Failed to update content-type: ${res.status} ${res.statusText} - ${errorText}`);
+          }
+          
+          return json({
+            success: true,
+            objectKey: clientObjectKey,
+            contentType: fileType,
+            message: 'Content-Type updated successfully'
+          });
+        }
       default:
         return bad('Invalid action');
     }

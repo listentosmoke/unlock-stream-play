@@ -4,6 +4,7 @@ import { useAuth } from '@/components/auth/AuthContext';
 import { Header } from '@/components/layout/Header';
 import { VideoThumbnail } from '@/components/video/VideoThumbnail';
 import { VideoPlaceholder } from '@/components/video/VideoPlaceholder';
+import VideoPlayer from '@/components/video/VideoPlayer';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -61,8 +62,9 @@ const Video = () => {
           uploader_id,
           status,
           created_at,
-          updated_at
-        `; // Safe fields only for locked videos
+          updated_at,
+          r2_object_key
+        `; // Safe fields only for locked videos (including r2_object_key for new system)
 
       const { data, error } = await supabase
         .from('videos')
@@ -251,7 +253,13 @@ const Video = () => {
           <div className="lg:col-span-2">
             <div className="aspect-video bg-video-bg rounded-lg overflow-hidden mb-4 relative">
               {isUnlocked ? (
-                video.full_video_url ? (
+                video.r2_object_key ? (
+                  <VideoPlayer 
+                    objectKey={video.r2_object_key}
+                    poster={video.thumbnail_url}
+                    className="w-full h-full rounded-lg"
+                  />
+                ) : video.full_video_url ? (
                   <video 
                     controls 
                     className="w-full h-full"
