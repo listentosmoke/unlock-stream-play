@@ -280,12 +280,12 @@ export default function MultiFileUpload() {
       const { data: thumbPub } = supabase.storage.from('videos').getPublicUrl(thumbName);
       const thumbnailUrl = thumbPub?.publicUrl ?? null;
 
-      // 4) save metadata — store ONLY objectKey, not the ephemeral presigned URL
+      // 4) save metadata — note: full_video_url may be null if GET presign still propagating
       const { error: dbErr } = await supabase.from('videos').insert({
         title: uf.title.trim(),
         description: uf.description?.trim() || null,
         r2_object_key: objectKey,
-        mime_type: uf.file.type || 'video/mp4',
+        full_video_url: signedGetUrl ?? null,
         thumbnail_url: thumbnailUrl,
         uploader_id: user!.id,
         status: 'pending',
