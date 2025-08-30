@@ -18,7 +18,7 @@ export async function getReadUrl(objectKey: string, expires = 3600) {
   const url = resp.presignedUrl ?? resp.readUrl ?? resp.url;
   if (!url) {
     console.warn("Presign response payload", resp);
-    throw new Error("No presigned URL in response");
+    throw new Error("No presigned URL in response: " + JSON.stringify(resp));
   }
   return { ...resp, readUrl: url };
 }
