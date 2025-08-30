@@ -27,22 +27,56 @@ export default function VideoPlayer({
     if (!objectKey) return;
     setError(null);
     
+    console.log('🎬 VideoPlayer refreshUrl called:', { objectKey, preserveTime });
+    
     try {
       const v = videoRef.current;
-      const t = preserveTime && v ? v.currentTime || 0 : 0;
+      if (!v) {
+        console.log('❌ No video element found');
+        return;
+      }
+      
+      const t = preserveTime ? v.currentTime || 0 : 0;
+      console.log('🕐 Current time before refresh:', t);
+
+      // Abort any ongoing load to prevent race conditions
+      if (v.src && v.readyState > 0) {
+        console.log('🛑 Aborting current video load');
+        v.src = '';
+        v.load();
+      }
 
       const { readUrl, expiresIn } = await getReadUrl(objectKey, expiresSeconds);
+      console.log('✅ Got new URL:', readUrl);
+      
       setSrc(readUrl);
       setExpiresAt(Date.now() + (expiresIn ?? expiresSeconds) * 1000);
 
-      // After src swap, restore time & play
-      queueMicrotask(() => {
-        if (!v) return;
+      // Set new src and load - use setTimeout instead of queueMicrotask for better timing
+      setTimeout(() => {
+        if (!v || !readUrl) {
+          console.log('❌ Video element or URL unavailable in timeout');
+          return;
+        }
+        
+        console.log('🔄 Setting new video src and loading');
         v.src = readUrl;
         v.load();
-        if (t > 0) v.currentTime = t;
-        if (autoPlay) v.play().catch(() => {});
-      });
+        
+        if (t > 0) {
+          v.addEventListener('loadedmetadata', () => {
+            console.log('📍 Restoring time to:', t);
+            v.currentTime = t;
+          }, { once: true });
+        }
+        
+        if (autoPlay) {
+          v.addEventListener('canplay', () => {
+            console.log('▶️ Auto-playing video');
+            v.play().catch((e) => console.log('Play failed:', e));
+          }, { once: true });
+        }
+      }, 10);
       
       setLoading(false);
     } catch (err: any) {
