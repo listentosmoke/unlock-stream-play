@@ -47,32 +47,25 @@ const Video = () => {
         userHasUnlocked = !!unlockData;
       }
 
-      // Query based on unlock status - only get sensitive URLs if unlocked
-      const selectFields = userHasUnlocked 
-        ? '*' // Full access for unlocked videos
-        : `
-          id,
-          title,
-          description,
-          thumbnail_url,
-          duration,
-          unlock_cost,
-          view_count,
-          unlock_count,
-          uploader_id,
-          status,
-          created_at,
-          updated_at,
-          r2_object_key
-        `; // Safe fields only for locked videos (including r2_object_key for new system)
+      console.log('🔍 fetchVideo debug:', { id, userHasUnlocked, user: !!user });
 
+      // Fetch video data - always include r2_object_key for VideoPlayer
       const { data, error } = await supabase
         .from('videos')
-        .select(selectFields)
+        .select('*')
         .eq('id', id)
         .single();
 
       if (error) throw error;
+      
+      console.log('📹 Video data fetched:', { 
+        id: data.id, 
+        title: data.title, 
+        hasR2Key: !!data.r2_object_key,
+        hasFullVideoUrl: !!data.full_video_url,
+        userHasUnlocked 
+      });
+      
       setVideo(data);
       setIsUnlocked(userHasUnlocked);
     } catch (error) {
